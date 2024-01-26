@@ -1,3 +1,14 @@
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Verifier.h"
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -8,6 +19,15 @@
 #include <vector>
 #include <fstream>
 #include <iostream>
+
+// using namespace llvm;
+
+//===----------------------------------------------------------------------===//
+// Configuration
+//===----------------------------------------------------------------------===//
+
+// TODO: Obviously, make it somehow configurable for the user
+const std::string FileName{"input.toy"};
 
 //===----------------------------------------------------------------------===//
 // Lexer
@@ -31,22 +51,21 @@ static std::string IdentifierStr; // Filled in if tok_identifier
 static double NumVal;             // Filled in if tok_number
 
 char ReadChar() {
-  static std::fstream in("input.toy");
+  static std::fstream in(FileName);
+  char result = -2;
   if (!in.is_open()) {
-    throw std::runtime_error("Can't open file");
-  }
-  char result;
-  if (in.good()) {
+    std::cerr << "Can't open input file: " << FileName << std::endl;
+  } else  if (in.good()) {
     in.get(result);
   } else if (in.eof()) {
     result = EOF;
   } else if (in.fail()) {
-    throw std::runtime_error("Error reading file");
+    std::cerr << "Error reading file: " << FileName << std::endl;
   } else {
-    throw std::runtime_error("Unknown error when reading file");
+    std::cerr << "Unknown error when reading file: " << FileName << std::endl;
   }
 
-  std::cout << "Read char: " << char(result) << " (as int: " << (int)result << ")\n";
+  // std::cout << "Read char: " << char(result) << " (as int: " << (int)result << ")\n";
   return result;
 }
 
@@ -115,6 +134,7 @@ namespace {
 class ExprAST {
 public:
   virtual ~ExprAST() = default;
+  virtual llvm::Value *codegen() = 0;
 };
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
@@ -123,6 +143,7 @@ class NumberExprAST : public ExprAST {
 
 public:
   NumberExprAST(double Val) : Val(Val) {}
+  llvm::Value *codegen() override;
 };
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
@@ -131,6 +152,7 @@ class VariableExprAST : public ExprAST {
 
 public:
   VariableExprAST(const std::string &Name) : Name(Name) {}
+  llvm::Value *codegen() override;
 };
 
 /// BinaryExprAST - Expression class for a binary operator.
@@ -142,6 +164,7 @@ public:
   BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+  llvm::Value *codegen() override;
 };
 
 /// CallExprAST - Expression class for function calls.
@@ -153,6 +176,7 @@ public:
   CallExprAST(const std::string &Callee,
               std::vector<std::unique_ptr<ExprAST>> Args)
       : Callee(Callee), Args(std::move(Args)) {}
+  llvm::Value *codegen() override;
 };
 
 /// PrototypeAST - This class represents the "prototype" for a function,
@@ -165,7 +189,8 @@ class PrototypeAST {
 public:
   PrototypeAST(const std::string &Name, std::vector<std::string> Args)
       : Name(Name), Args(std::move(Args)) {}
-
+  
+  llvm::Function *codegen();
   const std::string &getName() const { return Name; }
 };
 
@@ -178,6 +203,8 @@ public:
   FunctionAST(std::unique_ptr<PrototypeAST> Proto,
               std::unique_ptr<ExprAST> Body)
       : Proto(std::move(Proto)), Body(std::move(Body)) {}
+
+  llvm::Function *codegen();
 };
 
 } // end anonymous namespace
@@ -395,12 +422,156 @@ static std::unique_ptr<PrototypeAST> ParseExtern() {
 }
 
 //===----------------------------------------------------------------------===//
-// Top-Level parsing
+// Code Generation
 //===----------------------------------------------------------------------===//
 
+static std::unique_ptr<llvm::LLVMContext> TheContext;
+static std::unique_ptr<llvm::Module> TheModule;
+static std::unique_ptr<llvm::IRBuilder<>> Builder;
+static std::map<std::string, llvm::Value *> NamedValues;
+
+llvm::Value *LogErrorV(const char *Str) {
+  LogError(Str);
+  return nullptr;
+}
+
+llvm::Value *NumberExprAST::codegen() {
+  return llvm::ConstantFP::get(*TheContext, llvm::APFloat(Val));
+}
+
+llvm::Value *VariableExprAST::codegen() {
+  // Look this variable up in the function.
+  llvm::Value *V = NamedValues[Name];
+  if (!V)
+    LogErrorV("Unknown variable name");
+  return V;
+}
+
+llvm::Value *BinaryExprAST::codegen() {
+  llvm::Value *L = LHS->codegen();
+  llvm::Value *R = RHS->codegen();
+  if (!L || !R)
+    return nullptr;
+
+  switch (Op) {
+  case '+':
+    return Builder->CreateFAdd(L, R, "addtmp");
+  case '-':
+    return Builder->CreateFSub(L, R, "subtmp");
+  case '*':
+    return Builder->CreateFMul(L, R, "multmp");
+  case '<':
+    L = Builder->CreateFCmpULT(L, R, "cmptmp");
+    // Convert bool 0/1 to double 0.0 or 1.0
+    return Builder->CreateUIToFP(L, llvm::Type::getDoubleTy(*TheContext),
+                                 "booltmp");
+  default:
+    return LogErrorV("invalid binary operator");
+  }
+}
+
+llvm::Value *CallExprAST::codegen() {
+  // Look up the name in the global module table.
+  llvm::Function *CalleeF = TheModule->getFunction(Callee);
+  if (!CalleeF)
+    return LogErrorV("Unknown function referenced");
+
+  // If argument mismatch error.
+  if (CalleeF->arg_size() != Args.size())
+    return LogErrorV("Incorrect # arguments passed");
+
+  std::vector<llvm::Value *> ArgsV;
+  // TODO: Use no-index for loop, or - even better - some std algorithm (std::transform?)
+  for (unsigned i = 0, e = Args.size(); i != e; ++i) {
+    ArgsV.push_back(Args[i]->codegen());
+    if (!ArgsV.back())
+      return nullptr;
+  }
+
+  return Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+}
+
+llvm::Function *PrototypeAST::codegen() {
+  // Make the function type:  double(double,double) etc.
+  std::vector<llvm::Type*> Doubles(Args.size(),
+                             llvm::Type::getDoubleTy(*TheContext));
+                            
+  // TODO: move Doubles?
+  llvm::FunctionType *FT =
+    llvm::FunctionType::get(llvm::Type::getDoubleTy(*TheContext), Doubles, false);
+
+  llvm::Function *F =
+    llvm::Function::Create(FT, llvm::Function::ExternalLinkage, Name, TheModule.get());
+
+  // Set names for all arguments.
+  unsigned Idx = 0;
+  for (auto &Arg : F->args())
+    Arg.setName(Args[Idx++]);
+
+  return F;
+}
+
+// TODO: The following code contains a bug. It will fail in case parameters name in declaration and definition differ. Example:
+// extern foo(a);     # ok, defines foo.
+// def foo(b) b;      # Error: Unknown variable name. (decl using 'a' takes precedence).
+llvm::Function *FunctionAST::codegen() {
+  // First, check for an existing function from a previous 'extern' declaration.
+  llvm::Function *TheFunction = TheModule->getFunction(Proto->getName());
+
+  if (!TheFunction)
+    TheFunction = Proto->codegen();
+
+  if (!TheFunction)
+    return nullptr;
+
+  if (!TheFunction->empty())
+    return (llvm::Function*)LogErrorV("Function cannot be redefined.");
+
+  // Create a new basic block to start insertion into.
+  llvm::BasicBlock *BB = llvm::BasicBlock::Create(*TheContext, "entry", TheFunction);
+  Builder->SetInsertPoint(BB);
+
+  // Record the function arguments in the NamedValues map.
+  NamedValues.clear();
+  for (auto &Arg : TheFunction->args())
+    NamedValues[std::string(Arg.getName())] = &Arg;
+
+  if (llvm::Value *RetVal = Body->codegen()) {
+    // Finish off the function.
+    Builder->CreateRet(RetVal);
+
+    // Validate the generated code, checking for consistency.
+    verifyFunction(*TheFunction);
+
+    return TheFunction;
+  }
+  
+  // Error reading body, remove function.
+  TheFunction->eraseFromParent();
+  return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
+// Top-Level parsing and JIT Driver
+//===----------------------------------------------------------------------===//
+
+static void InitializeModule() {
+  // Open a new context and module.
+  TheContext = std::make_unique<llvm::LLVMContext>();
+  TheModule = std::make_unique<llvm::Module>("my cool jit", *TheContext);
+  TheModule->setSourceFileName(FileName);
+
+  // Create a new builder for the module.
+  Builder = std::make_unique<llvm::IRBuilder<>>(*TheContext);
+}
+
 static void HandleDefinition() {
-  if (ParseDefinition()) {
-    fprintf(stderr, "Parsed a function definition.\n");
+  if (auto FnAST = ParseDefinition()) {
+    if (auto *FnIR = FnAST->codegen()) {
+      fprintf(stderr, "Read function definition:");
+      FnIR->print(llvm::errs());
+      fprintf(stderr, "\n");
+    }
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -408,8 +579,12 @@ static void HandleDefinition() {
 }
 
 static void HandleExtern() {
-  if (ParseExtern()) {
-    fprintf(stderr, "Parsed an extern\n");
+  if (auto ProtoAST = ParseExtern()) {
+    if (auto *FnIR = ProtoAST->codegen()) {
+      fprintf(stderr, "Read extern: ");
+      FnIR->print(llvm::errs());
+      fprintf(stderr, "\n");
+    }
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -418,8 +593,15 @@ static void HandleExtern() {
 
 static void HandleTopLevelExpression() {
   // Evaluate a top-level expression into an anonymous function.
-  if (ParseTopLevelExpr()) {
-    fprintf(stderr, "Parsed a top-level expr\n");
+  if (auto FnAST = ParseTopLevelExpr()) {
+    if (auto *FnIR = FnAST->codegen()) {
+      fprintf(stderr, "Read top-level expression:");
+      FnIR->print(llvm::errs());
+      fprintf(stderr, "\n");
+
+      // Remove the anonymous expression.
+      FnIR->eraseFromParent();
+    }
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -464,10 +646,15 @@ int main() {
   // Prime the first token.
   // fprintf(stderr, "ready> ");
   getNextToken();
-  std::cout << "[AB]\n";
+
+  // Make the module, which holds all the code.
+  InitializeModule();
 
   // Run the main "interpreter loop" now.
   MainLoop();
+
+  // Print out all of the generated code.
+  TheModule->print(llvm::errs(), nullptr);
 
   return 0;
 }

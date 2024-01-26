@@ -1,5 +1,14 @@
-def foo(x y)
-  x+foo(y, 4.0)
+def infinite(x y)
+  x+infinite(y, 4.0)
 
-def bar(x y)
+def sum(x y)
   x+y
+
+def foo(a b)
+  a*a + 2*a*b + b*b
+
+foo(2.0, 3.0)
+
+extern printd(x)
+
+printd(foo(2.0, 3.0))
