@@ -1,0 +1,5 @@
+def foo(x y)
+  x+foo(y, 4.0)
+
+def bar(x y)
+  x+y
