@@ -1,3 +1,16 @@
+#include <bits/types/FILE.h>
+#include <cctype>
+#include <cstdio>
+#include <cstdlib>
+#include <map>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+#include <fstream>
+#include <iostream>
+#include <optional>
+
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
@@ -9,25 +22,152 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
-#include <cctype>
-#include <cstdio>
-#include <cstdlib>
-#include <map>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
-#include <fstream>
-#include <iostream>
 
-// using namespace llvm;
+// TODO: This file is a mixture of functional C-style code (mostly copied from LLVM tutorial)
+// and object-oriented C++ code (mostly the part added by me). Clean this up.
 
 //===----------------------------------------------------------------------===//
 // Configuration
 //===----------------------------------------------------------------------===//
 
-// TODO: Obviously, make it somehow configurable for the user
-const std::string FileName{"input.toy"};
+class Args {
+private:
+  const static std::string INTERACTIVE;
+  const static std::string FILENAME;
+  const static std::string DEFAULT_FILENAME;
+
+public:
+  explicit Args(int argc, char *argv[]) : args(argv, argv+argc) {
+    verify();
+  }
+
+private:
+  std::optional<std::string> getCmdOption(const std::string & option) const
+  {
+      auto itr = std::find(begin(args), end(args), option);
+      if (itr != end(args) && ++itr != end(args))
+      {
+          return *itr;
+      }
+      return std::nullopt;
+  }
+
+  bool cmdOptionExists(const std::string& option) const
+  {
+      return std::find(begin(args), end(args), option) != end(args);
+  }
+
+  void verify() const {
+    if (cmdOptionExists(INTERACTIVE) && cmdOptionExists(FILENAME)) {
+      std::cerr << "Can't use both interactive and filename options at the same time. Filename will be ignored!\n";
+    }
+  }
+
+public:
+  bool isInteractive() const {
+    return cmdOptionExists(INTERACTIVE);
+  }
+
+  std::string getFilename() const {
+    if (isInteractive()) {
+      return "";
+    }
+    auto filename = getCmdOption(FILENAME);
+    if (filename) {
+      return *filename;
+    }
+    return DEFAULT_FILENAME;
+  }
+
+private:
+  std::vector<std::string> args;
+};
+
+const std::string Args::INTERACTIVE = "-i";
+const std::string Args::FILENAME = "-f";
+const std::string Args::DEFAULT_FILENAME = "input.toy";
+
+class UI {
+public:
+  virtual char readChar() = 0;
+  virtual void showPrompt() {}
+  virtual ~UI() = default;
+};
+
+class ConsoleUI : public UI {
+public:
+  char readChar() override {
+    return getchar();
+  }
+
+  void showPrompt() override {
+    std::cerr << "ready> ";
+  }
+};
+
+class FileUI : public UI {
+public:
+  explicit FileUI(std::string filename) : file(filename) {
+    if (!file.is_open()) {
+      std::cerr << "Can't open input file: " << filename << std::endl;
+    }
+  }
+
+  char readChar() override {
+    char result = -2;
+    if (file.good()) {
+      file.get(result);
+    } else if (file.eof()) {
+      result = EOF;
+    } else if (file.fail()) {
+      std::cerr << "Error reading input file!" << std::endl;
+    } else {
+      std::cerr << "Unknown error reading input file!" << std::endl;
+    }
+
+    return result;
+  }
+
+private:
+  std::fstream file;
+};
+
+class Configuration {
+private:
+  static std::unique_ptr<Configuration> config;
+
+public:
+  explicit Configuration(const Args& args) {
+    if (args.isInteractive()) {
+      ui = std::make_unique<ConsoleUI>();
+    } else {
+      ui = std::make_unique<FileUI>(args.getFilename());
+    }
+  }
+
+  // TODO: Delete all copy and move constructors and assignment operators
+
+public:
+  static void initialize(const Args& args) {
+    config = std::make_unique<Configuration>(args);
+  }
+
+  static auto& get() {
+    if (!config) {
+      std::cerr << "Configuration not initialized!";
+    }
+    return *config;
+  }
+
+  auto& getUI() {
+    return *ui;
+  }
+
+private:
+  std::unique_ptr<UI> ui; // Class invariant - never nullptr
+};
+
+std::unique_ptr<Configuration> Configuration::config;
 
 //===----------------------------------------------------------------------===//
 // Lexer
@@ -50,23 +190,8 @@ enum Token {
 static std::string IdentifierStr; // Filled in if tok_identifier
 static double NumVal;             // Filled in if tok_number
 
-char ReadChar() {
-  static std::fstream in(FileName);
-  char result = -2;
-  if (!in.is_open()) {
-    std::cerr << "Can't open input file: " << FileName << std::endl;
-  } else  if (in.good()) {
-    in.get(result);
-  } else if (in.eof()) {
-    result = EOF;
-  } else if (in.fail()) {
-    std::cerr << "Error reading file: " << FileName << std::endl;
-  } else {
-    std::cerr << "Unknown error when reading file: " << FileName << std::endl;
-  }
-
-  // std::cout << "Read char: " << char(result) << " (as int: " << (int)result << ")\n";
-  return result;
+char readChar() {
+  return Configuration::get().getUI().readChar();
 }
 
 /// gettok - Return the next token from standard input.
@@ -75,11 +200,11 @@ static int gettok() {
 
   // Skip any whitespace.
   while (isspace(LastChar))
-    LastChar = ReadChar();
+    LastChar = readChar();
 
   if (isalpha(LastChar)) { // identifier: [a-zA-Z][a-zA-Z0-9]*
     IdentifierStr = LastChar;
-    while (isalnum((LastChar = ReadChar())))
+    while (isalnum((LastChar = readChar())))
       IdentifierStr += LastChar;
 
     if (IdentifierStr == "def")
@@ -97,7 +222,7 @@ static int gettok() {
         DotFound = true;
       }
       NumStr += LastChar;
-      LastChar = ReadChar();
+      LastChar = readChar();
     } while (isdigit(LastChar) || ((!DotFound) && LastChar == '.'));
 
     NumVal = strtod(NumStr.c_str(), nullptr);
@@ -107,7 +232,7 @@ static int gettok() {
   if (LastChar == '#') {
     // Comment until end of line.
     do
-      LastChar = ReadChar();
+      LastChar = readChar();
     while (LastChar != EOF && LastChar != '\n' && LastChar != '\r');
 
     if (LastChar != EOF)
@@ -120,7 +245,7 @@ static int gettok() {
 
   // Otherwise, just return the character as its ascii value.
   int ThisChar = LastChar;
-  LastChar = ReadChar();
+  LastChar = readChar();
   return ThisChar;
 }
 
@@ -555,11 +680,15 @@ llvm::Function *FunctionAST::codegen() {
 // Top-Level parsing and JIT Driver
 //===----------------------------------------------------------------------===//
 
-static void InitializeModule() {
+static void InitializeModule(const Args& args) {
   // Open a new context and module.
   TheContext = std::make_unique<llvm::LLVMContext>();
   TheModule = std::make_unique<llvm::Module>("my cool jit", *TheContext);
-  TheModule->setSourceFileName(FileName);
+  if (args.isInteractive()) {
+    TheModule->setSourceFileName("interactive");
+  } else {
+    TheModule->setSourceFileName(args.getFilename());
+  }
 
   // Create a new builder for the module.
   Builder = std::make_unique<llvm::IRBuilder<>>(*TheContext);
@@ -611,7 +740,7 @@ static void HandleTopLevelExpression() {
 /// top ::= definition | external | expression | ';'
 static void MainLoop() {
   while (true) {
-    // fprintf(stderr, "ready> ");
+    Configuration::get().getUI().showPrompt();
     switch (CurTok) {
     case tok_eof:
       return;
@@ -635,7 +764,16 @@ static void MainLoop() {
 // Main driver code.
 //===----------------------------------------------------------------------===//
 
-int main() {
+int main(int argc, char * argv[]) {
+  auto args = Args(argc, argv);
+  Configuration::initialize(args);
+
+  if (args.isInteractive()) {
+    std::cerr << "Running interactive interpreter" << std::endl;
+  } else {
+    std::cerr << "Reading file: " << args.getFilename() << std::endl;
+  }
+
   // Install standard binary operators.
   // 1 is lowest precedence.
   BinopPrecedence['<'] = 10;
@@ -644,11 +782,11 @@ int main() {
   BinopPrecedence['*'] = 40; // highest.
 
   // Prime the first token.
-  // fprintf(stderr, "ready> ");
+  Configuration::get().getUI().showPrompt();
   getNextToken();
 
   // Make the module, which holds all the code.
-  InitializeModule();
+  InitializeModule(args);
 
   // Run the main "interpreter loop" now.
   MainLoop();
@@ -658,14 +796,3 @@ int main() {
 
   return 0;
 }
-
-// int main() {
-//   char c = ReadChar();
-//   int i = 0;
-//   while (++i < 100) {
-//     std::cout << c;
-//     c = ReadChar();
-//   }
-
-//   return 0;
-// }
