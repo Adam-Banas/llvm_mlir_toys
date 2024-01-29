@@ -1,0 +1,5 @@
+def mean(a b)
+  (a+b)*0.5
+
+def mean4(a b c d)
+  (a+b+c+d)*0.25

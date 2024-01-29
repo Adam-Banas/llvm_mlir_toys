@@ -18,10 +18,19 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/TargetParser/Host.h"
 
 // TODO: This file is a mixture of functional C-style code (mostly copied from LLVM tutorial)
 // and object-oriented C++ code (mostly the part added by me). Clean this up.
@@ -33,8 +42,9 @@
 class Args {
 private:
   const static std::string INTERACTIVE;
-  const static std::string FILENAME;
-  const static std::string DEFAULT_FILENAME;
+  const static std::string SOURCE_FILENAME;
+  const static std::string DEFAULT_SOURCE_FILENAME;
+  const static std::string OUTPUT_FILENAME;
 
 public:
   explicit Args(int argc, char *argv[]) : args(argv, argv+argc) {
@@ -58,7 +68,7 @@ private:
   }
 
   void verify() const {
-    if (cmdOptionExists(INTERACTIVE) && cmdOptionExists(FILENAME)) {
+    if (cmdOptionExists(INTERACTIVE) && cmdOptionExists(SOURCE_FILENAME)) {
       std::cerr << "Can't use both interactive and filename options at the same time. Filename will be ignored!\n";
     }
   }
@@ -68,15 +78,19 @@ public:
     return cmdOptionExists(INTERACTIVE);
   }
 
-  std::string getFilename() const {
+  std::string getSourceFilename() const {
     if (isInteractive()) {
       return "";
     }
-    auto filename = getCmdOption(FILENAME);
+    auto filename = getCmdOption(SOURCE_FILENAME);
     if (filename) {
       return *filename;
     }
-    return DEFAULT_FILENAME;
+    return DEFAULT_SOURCE_FILENAME;
+  }
+
+  std::optional<std::string> getOutputFilename() const {
+    return getCmdOption(OUTPUT_FILENAME);
   }
 
 private:
@@ -84,8 +98,9 @@ private:
 };
 
 const std::string Args::INTERACTIVE = "-i";
-const std::string Args::FILENAME = "-f";
-const std::string Args::DEFAULT_FILENAME = "input.toy";
+const std::string Args::SOURCE_FILENAME = "-f";
+const std::string Args::DEFAULT_SOURCE_FILENAME = "input.toy";
+const std::string Args::OUTPUT_FILENAME = "-o";
 
 class UI {
 public:
@@ -141,7 +156,7 @@ public:
     if (args.isInteractive()) {
       ui = std::make_unique<ConsoleUI>();
     } else {
-      ui = std::make_unique<FileUI>(args.getFilename());
+      ui = std::make_unique<FileUI>(args.getSourceFilename());
     }
   }
 
@@ -687,7 +702,7 @@ static void InitializeModule(const Args& args) {
   if (args.isInteractive()) {
     TheModule->setSourceFileName("interactive");
   } else {
-    TheModule->setSourceFileName(args.getFilename());
+    TheModule->setSourceFileName(args.getSourceFilename());
   }
 
   // Create a new builder for the module.
@@ -764,6 +779,61 @@ static void MainLoop() {
 // Main driver code.
 //===----------------------------------------------------------------------===//
 
+bool emitObjectFile(const std::string& filename) {
+  // Initialize the target registry etc.
+  llvm::InitializeAllTargetInfos();
+  llvm::InitializeAllTargets();
+  llvm::InitializeAllTargetMCs();
+  llvm::InitializeAllAsmParsers();
+  llvm::InitializeAllAsmPrinters();
+
+  auto targetTriple = llvm::sys::getDefaultTargetTriple();
+  TheModule->setTargetTriple(targetTriple);
+
+  std::string Error;
+  auto target = llvm::TargetRegistry::lookupTarget(targetTriple, Error);
+
+  // Print an error and exit if we couldn't find the requested target.
+  // This generally occurs if we've forgotten to initialise the
+  // TargetRegistry or we have a bogus target triple.
+  if (!target) {
+    llvm::errs() << Error;
+    return false;
+  }
+
+  auto CPU = "generic";
+  auto Features = "";
+
+  llvm::TargetOptions opt;
+  auto targetMachine = target->createTargetMachine(targetTriple, CPU, Features, opt, llvm::Reloc::PIC_);
+
+  TheModule->setDataLayout(targetMachine->createDataLayout());
+  TheModule->setTargetTriple(targetTriple);
+
+  std::error_code EC;
+  llvm::raw_fd_ostream dest(filename, EC, llvm::sys::fs::OF_None);
+
+  if (EC) {
+    llvm::errs() << "Could not open file: " << EC.message();
+    return false;
+  }
+
+  llvm::legacy::PassManager pass;
+  auto FileType = llvm::CodeGenFileType::ObjectFile;
+
+  if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, FileType)) {
+    llvm::errs() << "TargetMachine can't emit a file of this type";
+    return false;
+  }
+
+  pass.run(*TheModule);
+  dest.flush();
+
+  std::cout << "Emitted object file: " << filename << std::endl;
+
+  return true;
+}
+
 int main(int argc, char * argv[]) {
   auto args = Args(argc, argv);
   Configuration::initialize(args);
@@ -771,7 +841,7 @@ int main(int argc, char * argv[]) {
   if (args.isInteractive()) {
     std::cerr << "Running interactive interpreter" << std::endl;
   } else {
-    std::cerr << "Reading file: " << args.getFilename() << std::endl;
+    std::cerr << "Reading file: " << args.getSourceFilename() << std::endl;
   }
 
   // Install standard binary operators.
@@ -793,6 +863,13 @@ int main(int argc, char * argv[]) {
 
   // Print out all of the generated code.
   TheModule->print(llvm::errs(), nullptr);
+
+  auto output_filename = args.getOutputFilename();
+  if (output_filename) {
+    if (!emitObjectFile(*output_filename)) {
+      return 1;
+    }
+  }
 
   return 0;
 }
