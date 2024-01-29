@@ -1,0 +1,4 @@
+# C++ code defined in our compiler (imitates external library)
+extern printd(x)
+
+printd(12.5)

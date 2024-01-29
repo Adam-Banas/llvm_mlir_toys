@@ -40,6 +40,8 @@
 #include "llvm/Transforms/Scalar/Reassociate.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
 
+#include "llvm_includes/KaleidoscopeJIT.h"
+
 // TODO: This file is a mixture of functional C-style code (mostly copied from LLVM tutorial)
 // and object-oriented C++ code (mostly the part added by me). Clean this up.
 
@@ -54,7 +56,12 @@ private:
   const static std::string DEFAULT_SOURCE_FILENAME;
   const static std::string OUTPUT_FILENAME;
 
+  friend int main(int, char *[]);
+
 public:
+  explicit Args() {}
+
+private:
   explicit Args(int argc, char *argv[]) : args(argv, argv+argc) {
     verify();
   }
@@ -104,6 +111,8 @@ public:
 private:
   std::vector<std::string> args;
 };
+
+Args args;
 
 const std::string Args::INTERACTIVE = "-i";
 const std::string Args::SOURCE_FILENAME = "-f";
@@ -577,6 +586,7 @@ static std::unique_ptr<llvm::LLVMContext> TheContext;
 static std::unique_ptr<llvm::Module> TheModule;
 static std::unique_ptr<llvm::IRBuilder<>> Builder;
 static std::map<std::string, llvm::Value *> NamedValues;
+static std::unique_ptr<llvm::orc::KaleidoscopeJIT> TheJIT;
 static std::unique_ptr<llvm::FunctionPassManager> TheFPM;
 static std::unique_ptr<llvm::LoopAnalysisManager> TheLAM;
 static std::unique_ptr<llvm::FunctionAnalysisManager> TheFAM;
@@ -584,9 +594,26 @@ static std::unique_ptr<llvm::CGSCCAnalysisManager> TheCGAM;
 static std::unique_ptr<llvm::ModuleAnalysisManager> TheMAM;
 static std::unique_ptr<llvm::PassInstrumentationCallbacks> ThePIC;
 static std::unique_ptr<llvm::StandardInstrumentations> TheSI;
+static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
+static llvm::ExitOnError ExitOnErr;
 
 llvm::Value *LogErrorV(const char *Str) {
   LogError(Str);
+  return nullptr;
+}
+
+llvm::Function *getFunction(std::string Name) {
+  // First, see if the function has already been added to the current module.
+  if (auto *F = TheModule->getFunction(Name))
+    return F;
+
+  // If not, check whether we can codegen the declaration from some existing
+  // prototype.
+  auto FI = FunctionProtos.find(Name);
+  if (FI != FunctionProtos.end())
+    return FI->second->codegen();
+
+  // If no existing prototype exists, return null.
   return nullptr;
 }
 
@@ -627,7 +654,7 @@ llvm::Value *BinaryExprAST::codegen() {
 
 llvm::Value *CallExprAST::codegen() {
   // Look up the name in the global module table.
-  llvm::Function *CalleeF = TheModule->getFunction(Callee);
+  llvm::Function *CalleeF = getFunction(Callee);
   if (!CalleeF)
     return LogErrorV("Unknown function referenced");
 
@@ -670,8 +697,11 @@ llvm::Function *PrototypeAST::codegen() {
 // extern foo(a);     # ok, defines foo.
 // def foo(b) b;      # Error: Unknown variable name. (decl using 'a' takes precedence).
 llvm::Function *FunctionAST::codegen() {
-  // First, check for an existing function from a previous 'extern' declaration.
-  llvm::Function *TheFunction = TheModule->getFunction(Proto->getName());
+  // Transfer ownership of the prototype to the FunctionProtos map, but keep a
+  // reference to it for use below.
+  auto &P = *Proto;
+  FunctionProtos[Proto->getName()] = std::move(Proto);
+  llvm::Function *TheFunction = getFunction(P.getName());
 
   if (!TheFunction)
     TheFunction = Proto->codegen();
@@ -713,11 +743,11 @@ llvm::Function *FunctionAST::codegen() {
 // Top-Level parsing and JIT Driver
 //===----------------------------------------------------------------------===//
 
-static void InitializeModuleAndManagers(const Args& args) {
+static void InitializeModuleAndManagers() {
   // Open a new context and module.
   TheContext = std::make_unique<llvm::LLVMContext>();
   TheModule = std::make_unique<llvm::Module>("KaleidoscopeJIT", *TheContext);
-  // TheModule->setDataLayout(TheJIT->getDataLayout());
+  TheModule->setDataLayout(TheJIT->getDataLayout());
 
   if (args.isInteractive()) {
     TheModule->setSourceFileName("interactive");
@@ -762,6 +792,9 @@ static void HandleDefinition() {
       fprintf(stderr, "Read function definition:");
       FnIR->print(llvm::errs());
       fprintf(stderr, "\n");
+      ExitOnErr(TheJIT->addModule(
+      llvm::orc::ThreadSafeModule(std::move(TheModule), std::move(TheContext))));
+      InitializeModuleAndManagers();
     }
   } else {
     // Skip token for error recovery.
@@ -775,6 +808,7 @@ static void HandleExtern() {
       fprintf(stderr, "Read extern: ");
       FnIR->print(llvm::errs());
       fprintf(stderr, "\n");
+      FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
     }
   } else {
     // Skip token for error recovery.
@@ -785,13 +819,25 @@ static void HandleExtern() {
 static void HandleTopLevelExpression() {
   // Evaluate a top-level expression into an anonymous function.
   if (auto FnAST = ParseTopLevelExpr()) {
-    if (auto *FnIR = FnAST->codegen()) {
-      fprintf(stderr, "Read top-level expression:");
-      FnIR->print(llvm::errs());
-      fprintf(stderr, "\n");
+    if (FnAST->codegen()) {
+      // Create a ResourceTracker to track JIT'd memory allocated to our
+      // anonymous expression -- that way we can free it after executing.
+      auto RT = TheJIT->getMainJITDylib().createResourceTracker();
 
-      // Remove the anonymous expression.
-      FnIR->eraseFromParent();
+      auto TSM = llvm::orc::ThreadSafeModule(std::move(TheModule), std::move(TheContext));
+      ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
+      InitializeModuleAndManagers();
+
+      // Search the JIT for the __anon_expr symbol.
+      auto ExprSymbol = ExitOnErr(TheJIT->lookup("__anon_expr"));
+
+      // Get the symbol's address and cast it to the right type (takes no
+      // arguments, returns a double) so we can call it as a native function.
+      double (*FP)() = ExprSymbol.getAddress().toPtr<double (*)()>();
+      fprintf(stderr, "Evaluated to %f\n", FP());
+
+      // Delete the anonymous expression module from the JIT.
+      ExitOnErr(RT->remove());
     }
   } else {
     // Skip token for error recovery.
@@ -820,6 +866,28 @@ static void MainLoop() {
       break;
     }
   }
+}
+
+//===----------------------------------------------------------------------===//
+// "Library" functions that can be "extern'd" from user code.
+//===----------------------------------------------------------------------===//
+
+#ifdef _WIN32
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
+/// putchard - putchar that takes a double and returns 0.
+extern "C" DLLEXPORT double putchard(double X) {
+  fputc((char)X, stderr);
+  return 0;
+}
+
+/// printd - printf that takes a double prints it as "%f\n", returning 0.
+extern "C" DLLEXPORT double printd(double X) {
+  fprintf(stderr, "%f\n", X);
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -882,7 +950,7 @@ bool emitObjectFile(const std::string& filename) {
 }
 
 int main(int argc, char * argv[]) {
-  auto args = Args(argc, argv);
+  args = Args(argc, argv);
   Configuration::initialize(args);
 
   if (args.isInteractive()) {
@@ -890,6 +958,10 @@ int main(int argc, char * argv[]) {
   } else {
     std::cerr << "Reading file: " << args.getSourceFilename() << std::endl;
   }
+  
+  llvm::InitializeNativeTarget();
+  llvm::InitializeNativeTargetAsmPrinter();
+  llvm::InitializeNativeTargetAsmParser();
 
   // Install standard binary operators.
   // 1 is lowest precedence.
@@ -902,8 +974,10 @@ int main(int argc, char * argv[]) {
   Configuration::get().getUI().showPrompt();
   getNextToken();
 
+  TheJIT = ExitOnErr(llvm::orc::KaleidoscopeJIT::Create());
+
   // Make the module, which holds all the code.
-  InitializeModuleAndManagers(args);
+  InitializeModuleAndManagers();
 
   // Run the main "interpreter loop" now.
   MainLoop();
@@ -911,6 +985,7 @@ int main(int argc, char * argv[]) {
   // Print out all of the generated code.
   TheModule->print(llvm::errs(), nullptr);
 
+  // If output filename was passed, emit object file
   auto output_filename = args.getOutputFilename();
   if (output_filename) {
     if (!emitObjectFile(*output_filename)) {

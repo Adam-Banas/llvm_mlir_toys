@@ -4,7 +4,7 @@ def cf(x)
   1+2+x
 
 # Constant folding example 2
-# Final IR should be: 3+x or x+3
+# Final IR should be: x+3
 def cf2(x)
   x+(1+2)
 
