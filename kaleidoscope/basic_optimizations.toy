@@ -1,0 +1,19 @@
+# Constant folding example
+# Final IR should be: 3+x
+def cf(x)
+  1+2+x
+
+# Constant folding example 2
+# Final IR should be: 3+x or x+3
+def cf2(x)
+  x+(1+2)
+
+# Constant folding + common subexpression elimination example
+# Final IR should be: tmp=x+3; tmp*tmp
+def cfcse(x)
+  (1+2+x)*(x+(1+2))
+
+# Constant folding + common subexpression elimination example 2
+# Final IR should be: tmp=x+3; tmp*tmp
+def cfcse2(x)
+  (1+2+x)*(x+(1+1+1))
