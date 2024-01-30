@@ -579,11 +579,183 @@ static std::unique_ptr<PrototypeAST> ParseExtern() {
 }
 
 //===----------------------------------------------------------------------===//
+// Object emitter
+//===----------------------------------------------------------------------===//
+
+class ObjectEmitter {
+public:
+  explicit ObjectEmitter()
+  : filename(),
+    error(true),
+    pass(),
+    targetTriple(),
+    targetMachine(),
+    dest()
+  {}
+  explicit ObjectEmitter(const Args& args)
+  : filename(args.getOutputFilename()),
+    error(true),
+    pass(),
+    targetTriple(),
+    targetMachine(),
+    dest()
+  {
+    if (!filename) {
+      return;
+    }
+    // Initialize the target registry etc.
+    llvm::InitializeAllTargetInfos();
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllAsmParsers();
+    llvm::InitializeAllAsmPrinters();
+
+    targetTriple = llvm::sys::getDefaultTargetTriple();
+
+    std::string Error;
+    auto target = llvm::TargetRegistry::lookupTarget(targetTriple, Error);
+    
+    // Print an error and exit if we couldn't find the requested target.
+    // This generally occurs if we've forgotten to initialise the
+    // TargetRegistry or we have a bogus target triple.
+    if (!target) {
+      llvm::errs() << Error;
+      return;
+    }
+
+    auto CPU = "generic";
+    auto Features = "";
+
+    llvm::TargetOptions opt;
+    targetMachine = target->createTargetMachine(targetTriple, CPU, Features, opt, llvm::Reloc::PIC_);
+
+    std::error_code EC;
+    dest = std::make_unique<llvm::raw_fd_ostream>(*filename, EC, llvm::sys::fs::OF_None);
+
+    if (EC) {
+      llvm::errs() << "Could not open file: " << EC.message();
+      return;
+    }
+
+    pass = std::make_unique<llvm::legacy::PassManager>();
+    auto FileType = llvm::CodeGenFileType::ObjectFile;
+
+    if (targetMachine->addPassesToEmitFile(*pass, *dest, nullptr, FileType)) {
+      llvm::errs() << "TargetMachine can't emit a file of this type";
+      return;
+    }
+
+    // No error encountered - can clear the flag
+    error = false;
+  }
+
+public:
+  bool addModuleAndEmit(llvm::Module& module) {
+    static int counter = 0;
+    
+    if (!filename || error) {
+      return true;
+    }
+
+    auto local_filename = *filename;
+    local_filename = local_filename.substr(0, local_filename.length()-2) + std::to_string(counter++) + local_filename.substr(local_filename.length()-2);
+
+    // Initialize the target registry etc.
+    llvm::InitializeAllTargetInfos();
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllAsmParsers();
+    llvm::InitializeAllAsmPrinters();
+
+    targetTriple = llvm::sys::getDefaultTargetTriple();
+    module.setTargetTriple(targetTriple);
+
+    std::string Error;
+    auto target = llvm::TargetRegistry::lookupTarget(targetTriple, Error);
+    
+    // Print an error and exit if we couldn't find the requested target.
+    // This generally occurs if we've forgotten to initialise the
+    // TargetRegistry or we have a bogus target triple.
+    if (!target) {
+      llvm::errs() << Error;
+      return false;
+    }
+
+    auto CPU = "generic";
+    auto Features = "";
+
+    llvm::TargetOptions opt;
+    targetMachine = target->createTargetMachine(targetTriple, CPU, Features, opt, llvm::Reloc::PIC_);
+
+    module.setDataLayout(targetMachine->createDataLayout());
+
+    std::error_code EC;
+    dest = std::make_unique<llvm::raw_fd_ostream>(local_filename, EC, llvm::sys::fs::OF_None);
+
+    if (EC) {
+      llvm::errs() << "Could not open file: " << EC.message();
+      return false;
+    }
+
+    llvm::legacy::PassManager local_pass;
+    auto FileType = llvm::CodeGenFileType::ObjectFile;
+
+    if (targetMachine->addPassesToEmitFile(local_pass, *dest, nullptr, FileType)) {
+      llvm::errs() << "TargetMachine can't emit a file of this type";
+      return false;
+    }
+
+    local_pass.run(module);
+    dest->flush();
+
+    std::cout << "Emitted object file: " << local_filename << std::endl;
+    return true;
+  }
+
+  void addModule(llvm::Module& module) {
+    if (!filename || error) {
+      return;
+    }
+
+    module.setTargetTriple(targetTriple);
+    module.setDataLayout(targetMachine->createDataLayout());
+
+    pass->run(module);
+
+    std::cout << "Added module to object file: " << module.getName().str() << std::endl;
+  }
+
+  void emit() {
+    static int counter = 0;
+    if (!filename || error) {
+      return;
+    }
+
+    dest->flush();
+    std::cout << "Emitted object file: " << *filename << std::endl;
+  }
+
+private:
+  std::optional<std::string> filename;
+  bool error;
+  // Class invariant - the following object is guaranteed to be constructed when filename is not nullopt AND there is no error (error = false)
+  std::unique_ptr<llvm::legacy::PassManager> pass;
+  std::string targetTriple;
+  // Class invariant - the following pointer is guaranteed to be not nullptr when filename is not nullopt AND there is no error (error = false)
+  llvm::TargetMachine *targetMachine;
+  // Class invariant - the following object is guaranteed to be constructed when filename is not nullopt AND there is no error (error = false)
+  std::unique_ptr<llvm::raw_fd_ostream> dest;
+};
+
+ObjectEmitter oe;
+
+//===----------------------------------------------------------------------===//
 // Code Generation
 //===----------------------------------------------------------------------===//
 
 static std::unique_ptr<llvm::LLVMContext> TheContext;
 static std::unique_ptr<llvm::Module> TheModule;
+static llvm::Module* LastModule;
 static std::unique_ptr<llvm::IRBuilder<>> Builder;
 static std::map<std::string, llvm::Value *> NamedValues;
 static std::unique_ptr<llvm::orc::KaleidoscopeJIT> TheJIT;
@@ -743,10 +915,16 @@ llvm::Function *FunctionAST::codegen() {
 // Top-Level parsing and JIT Driver
 //===----------------------------------------------------------------------===//
 
+static auto add_counter_suffix(const std::string& name) {
+  static int counter = 0;
+
+  return name + std::to_string(counter++);
+}
+
 static void InitializeModuleAndManagers() {
   // Open a new context and module.
   TheContext = std::make_unique<llvm::LLVMContext>();
-  TheModule = std::make_unique<llvm::Module>("KaleidoscopeJIT", *TheContext);
+  TheModule = std::make_unique<llvm::Module>(add_counter_suffix("KaleidoscopeJIT"), *TheContext);
   TheModule->setDataLayout(TheJIT->getDataLayout());
 
   if (args.isInteractive()) {
@@ -792,6 +970,15 @@ static void HandleDefinition() {
       fprintf(stderr, "Read function definition:");
       FnIR->print(llvm::errs());
       fprintf(stderr, "\n");
+      LastModule = TheModule.get();
+
+      // Emit the module as object file, cause we are losing ownership of the module in few lines
+      // TODO: Sequence of multiple addModule calls -> one emit actually emits only the object file
+      // containing the symbols from last module. Using the messy addModuleAndEmit instead. Fix it.
+      // oe.addModule(*TheModule);
+      oe.addModuleAndEmit(*TheModule);
+
+
       ExitOnErr(TheJIT->addModule(
       llvm::orc::ThreadSafeModule(std::move(TheModule), std::move(TheContext))));
       InitializeModuleAndManagers();
@@ -823,6 +1010,12 @@ static void HandleTopLevelExpression() {
       // Create a ResourceTracker to track JIT'd memory allocated to our
       // anonymous expression -- that way we can free it after executing.
       auto RT = TheJIT->getMainJITDylib().createResourceTracker();
+
+      // Emit the module as object file, cause we are losing ownership of the module in few lines
+      // TODO: Sequence of multiple addModule calls -> one emit actually emits only the object file
+      // containing the symbols from last module. Using the messy addModuleAndEmit instead. Fix it.
+      // oe.addModule(*TheModule);
+      oe.addModuleAndEmit(*TheModule);
 
       auto TSM = llvm::orc::ThreadSafeModule(std::move(TheModule), std::move(TheContext));
       ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
@@ -894,64 +1087,67 @@ extern "C" DLLEXPORT double printd(double X) {
 // Main driver code.
 //===----------------------------------------------------------------------===//
 
-bool emitObjectFile(const std::string& filename) {
-  // Initialize the target registry etc.
-  llvm::InitializeAllTargetInfos();
-  llvm::InitializeAllTargets();
-  llvm::InitializeAllTargetMCs();
-  llvm::InitializeAllAsmParsers();
-  llvm::InitializeAllAsmPrinters();
+// bool emitObjectFile(const std::string& filename) {
+//   // Initialize the target registry etc.
+//   llvm::InitializeAllTargetInfos();
+//   llvm::InitializeAllTargets();
+//   llvm::InitializeAllTargetMCs();
+//   llvm::InitializeAllAsmParsers();
+//   llvm::InitializeAllAsmPrinters();
 
-  auto targetTriple = llvm::sys::getDefaultTargetTriple();
-  TheModule->setTargetTriple(targetTriple);
+//   auto targetTriple = llvm::sys::getDefaultTargetTriple();
+//   TheModule->setTargetTriple(targetTriple);
 
-  std::string Error;
-  auto target = llvm::TargetRegistry::lookupTarget(targetTriple, Error);
+//   std::string Error;
+//   auto target = llvm::TargetRegistry::lookupTarget(targetTriple, Error);
 
-  // Print an error and exit if we couldn't find the requested target.
-  // This generally occurs if we've forgotten to initialise the
-  // TargetRegistry or we have a bogus target triple.
-  if (!target) {
-    llvm::errs() << Error;
-    return false;
-  }
+//   // Print an error and exit if we couldn't find the requested target.
+//   // This generally occurs if we've forgotten to initialise the
+//   // TargetRegistry or we have a bogus target triple.
+//   if (!target) {
+//     llvm::errs() << Error;
+//     return false;
+//   }
 
-  auto CPU = "generic";
-  auto Features = "";
+//   auto CPU = "generic";
+//   auto Features = "";
 
-  llvm::TargetOptions opt;
-  auto targetMachine = target->createTargetMachine(targetTriple, CPU, Features, opt, llvm::Reloc::PIC_);
+//   llvm::TargetOptions opt;
+//   auto targetMachine = target->createTargetMachine(targetTriple, CPU, Features, opt, llvm::Reloc::PIC_);
 
-  TheModule->setDataLayout(targetMachine->createDataLayout());
-  TheModule->setTargetTriple(targetTriple);
+//   TheModule->setDataLayout(targetMachine->createDataLayout());
+//   TheModule->setTargetTriple(targetTriple);
 
-  std::error_code EC;
-  llvm::raw_fd_ostream dest(filename, EC, llvm::sys::fs::OF_None);
+//   std::error_code EC;
+//   llvm::raw_fd_ostream dest(filename, EC, llvm::sys::fs::OF_None);
 
-  if (EC) {
-    llvm::errs() << "Could not open file: " << EC.message();
-    return false;
-  }
+//   if (EC) {
+//     llvm::errs() << "Could not open file: " << EC.message();
+//     return false;
+//   }
 
-  llvm::legacy::PassManager pass;
-  auto FileType = llvm::CodeGenFileType::ObjectFile;
+//   llvm::legacy::PassManager pass;
+//   auto FileType = llvm::CodeGenFileType::ObjectFile;
 
-  if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, FileType)) {
-    llvm::errs() << "TargetMachine can't emit a file of this type";
-    return false;
-  }
+//   if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, FileType)) {
+//     llvm::errs() << "TargetMachine can't emit a file of this type";
+//     return false;
+//   }
 
-  pass.run(*TheModule);
-  dest.flush();
+//   pass.run(*TheModule);
+//   pass.run(*LastModule);
+//   dest.flush();
 
-  std::cout << "Emitted object file: " << filename << std::endl;
+//   std::cout << "Emitted object file: " << filename << std::endl;
 
-  return true;
-}
+//   return true;
+// }
 
 int main(int argc, char * argv[]) {
+  // Initialization
   args = Args(argc, argv);
   Configuration::initialize(args);
+  oe = ObjectEmitter(args);
 
   if (args.isInteractive()) {
     std::cerr << "Running interactive interpreter" << std::endl;
@@ -982,16 +1178,9 @@ int main(int argc, char * argv[]) {
   // Run the main "interpreter loop" now.
   MainLoop();
 
-  // Print out all of the generated code.
-  TheModule->print(llvm::errs(), nullptr);
-
-  // If output filename was passed, emit object file
-  auto output_filename = args.getOutputFilename();
-  if (output_filename) {
-    if (!emitObjectFile(*output_filename)) {
-      return 1;
-    }
-  }
+  // TODO: Sequence of multiple addModule calls -> one emit actually emits only the object file
+  // containing the symbols from last module. Using the messy addModuleAndEmit instead. Fix it.
+  // oe.emit();
 
   return 0;
 }

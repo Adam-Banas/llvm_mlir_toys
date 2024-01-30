@@ -7,5 +7,5 @@
 set -e
 
 ./toy -f statistics.toy -o statistics.o
-clang++ test_statistics.cpp statistics.o -o test_statistics
+clang++ test_statistics.cpp statistics*.o -o test_statistics
 ./test_statistics <<< "5.5 6.0"
