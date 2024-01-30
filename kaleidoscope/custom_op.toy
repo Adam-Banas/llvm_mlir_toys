@@ -1,0 +1,8 @@
+def divSimple(x y)
+  x/y
+
+def divPrecedenceOrder(x y z)
+  x+y/z*2.+x
+
+def divPrecedenceOrder2(x y z)
+  x+y*z/2.+x

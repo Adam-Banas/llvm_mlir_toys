@@ -814,6 +814,8 @@ llvm::Value *BinaryExprAST::codegen() {
     return Builder->CreateFSub(L, R, "subtmp");
   case '*':
     return Builder->CreateFMul(L, R, "multmp");
+  case '/':
+    return Builder->CreateFDiv(L, R, "divtmp");
   case '<':
     L = Builder->CreateFCmpULT(L, R, "cmptmp");
     // Convert bool 0/1 to double 0.0 or 1.0
@@ -1087,62 +1089,6 @@ extern "C" DLLEXPORT double printd(double X) {
 // Main driver code.
 //===----------------------------------------------------------------------===//
 
-// bool emitObjectFile(const std::string& filename) {
-//   // Initialize the target registry etc.
-//   llvm::InitializeAllTargetInfos();
-//   llvm::InitializeAllTargets();
-//   llvm::InitializeAllTargetMCs();
-//   llvm::InitializeAllAsmParsers();
-//   llvm::InitializeAllAsmPrinters();
-
-//   auto targetTriple = llvm::sys::getDefaultTargetTriple();
-//   TheModule->setTargetTriple(targetTriple);
-
-//   std::string Error;
-//   auto target = llvm::TargetRegistry::lookupTarget(targetTriple, Error);
-
-//   // Print an error and exit if we couldn't find the requested target.
-//   // This generally occurs if we've forgotten to initialise the
-//   // TargetRegistry or we have a bogus target triple.
-//   if (!target) {
-//     llvm::errs() << Error;
-//     return false;
-//   }
-
-//   auto CPU = "generic";
-//   auto Features = "";
-
-//   llvm::TargetOptions opt;
-//   auto targetMachine = target->createTargetMachine(targetTriple, CPU, Features, opt, llvm::Reloc::PIC_);
-
-//   TheModule->setDataLayout(targetMachine->createDataLayout());
-//   TheModule->setTargetTriple(targetTriple);
-
-//   std::error_code EC;
-//   llvm::raw_fd_ostream dest(filename, EC, llvm::sys::fs::OF_None);
-
-//   if (EC) {
-//     llvm::errs() << "Could not open file: " << EC.message();
-//     return false;
-//   }
-
-//   llvm::legacy::PassManager pass;
-//   auto FileType = llvm::CodeGenFileType::ObjectFile;
-
-//   if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, FileType)) {
-//     llvm::errs() << "TargetMachine can't emit a file of this type";
-//     return false;
-//   }
-
-//   pass.run(*TheModule);
-//   pass.run(*LastModule);
-//   dest.flush();
-
-//   std::cout << "Emitted object file: " << filename << std::endl;
-
-//   return true;
-// }
-
 int main(int argc, char * argv[]) {
   // Initialization
   args = Args(argc, argv);
@@ -1165,6 +1111,7 @@ int main(int argc, char * argv[]) {
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
   BinopPrecedence['*'] = 40; // highest.
+  BinopPrecedence['/'] = 40;
 
   // Prime the first token.
   Configuration::get().getUI().showPrompt();
