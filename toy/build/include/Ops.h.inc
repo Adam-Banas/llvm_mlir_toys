@@ -26,6 +26,11 @@ class FuncOp;
 } // namespace mlir
 namespace mlir {
 namespace toy {
+class FunctionalLinearOp;
+} // namespace toy
+} // namespace mlir
+namespace mlir {
+namespace toy {
 class GenericCallOp;
 } // namespace toy
 } // namespace mlir
@@ -573,6 +578,117 @@ public:
 } // namespace toy
 } // namespace mlir
 MLIR_DECLARE_EXPLICIT_TYPE_ID(::mlir::toy::FuncOp)
+
+namespace mlir {
+namespace toy {
+
+//===----------------------------------------------------------------------===//
+// ::mlir::toy::FunctionalLinearOp declarations
+//===----------------------------------------------------------------------===//
+
+namespace detail {
+class FunctionalLinearOpGenericAdaptorBase {
+public:
+protected:
+  ::mlir::DictionaryAttr odsAttrs;
+  ::std::optional<::mlir::OperationName> odsOpName;
+  ::mlir::RegionRange odsRegions;
+public:
+  FunctionalLinearOpGenericAdaptorBase(::mlir::DictionaryAttr attrs = nullptr, const ::mlir::EmptyProperties &properties = {}, ::mlir::RegionRange regions = {});
+
+  FunctionalLinearOpGenericAdaptorBase(FunctionalLinearOp op);
+
+  std::pair<unsigned, unsigned> getODSOperandIndexAndLength(unsigned index, unsigned odsOperandsSize);
+  ::mlir::DictionaryAttr getAttributes();
+};
+} // namespace detail
+template <typename RangeT>
+class FunctionalLinearOpGenericAdaptor : public detail::FunctionalLinearOpGenericAdaptorBase {
+  using ValueT = ::llvm::detail::ValueOfRange<RangeT>;
+  using Base = detail::FunctionalLinearOpGenericAdaptorBase;
+public:
+  FunctionalLinearOpGenericAdaptor(RangeT values, ::mlir::DictionaryAttr attrs = nullptr, const ::mlir::EmptyProperties &properties = {}, ::mlir::RegionRange regions = {}) : Base(attrs, properties, regions), odsOperands(values) {}
+
+  FunctionalLinearOpGenericAdaptor(RangeT values, ::mlir::DictionaryAttr attrs, ::mlir::OpaqueProperties properties, ::mlir::RegionRange regions = {}) : FunctionalLinearOpGenericAdaptor(values, attrs, (properties ? *properties.as<::mlir::EmptyProperties *>() : ::mlir::EmptyProperties{}), regions) {}
+
+  template <typename LateInst = FunctionalLinearOp, typename = std::enable_if_t<std::is_same_v<LateInst, FunctionalLinearOp>>>
+  FunctionalLinearOpGenericAdaptor(RangeT values, LateInst op) : Base(op), odsOperands(values) {}
+
+  std::pair<unsigned, unsigned> getODSOperandIndexAndLength(unsigned index) {
+    return Base::getODSOperandIndexAndLength(index, odsOperands.size());
+  }
+
+  RangeT getODSOperands(unsigned index) {
+    auto valueRange = getODSOperandIndexAndLength(index);
+    return {std::next(odsOperands.begin(), valueRange.first),
+             std::next(odsOperands.begin(), valueRange.first + valueRange.second)};
+  }
+
+  ValueT getInput() {
+    return (*getODSOperands(0).begin());
+  }
+
+  ValueT getWeight() {
+    return (*getODSOperands(1).begin());
+  }
+
+  ValueT getBias() {
+    return (*getODSOperands(2).begin());
+  }
+
+  RangeT getOperands() {
+    return odsOperands;
+  }
+
+private:
+  RangeT odsOperands;
+};
+class FunctionalLinearOpAdaptor : public FunctionalLinearOpGenericAdaptor<::mlir::ValueRange> {
+public:
+  using FunctionalLinearOpGenericAdaptor::FunctionalLinearOpGenericAdaptor;
+  FunctionalLinearOpAdaptor(FunctionalLinearOp op);
+
+  ::mlir::LogicalResult verify(::mlir::Location loc);
+};
+class FunctionalLinearOp : public ::mlir::Op<FunctionalLinearOp, ::mlir::OpTrait::ZeroRegions, ::mlir::OpTrait::OneResult, ::mlir::OpTrait::OneTypedResult<::mlir::TensorType>::Impl, ::mlir::OpTrait::ZeroSuccessors, ::mlir::OpTrait::NOperands<3>::Impl, ::mlir::OpTrait::OpInvariants> {
+public:
+  using Op::Op;
+  using Op::print;
+  using Adaptor = FunctionalLinearOpAdaptor;
+  template <typename RangeT>
+  using GenericAdaptor = FunctionalLinearOpGenericAdaptor<RangeT>;
+  using FoldAdaptor = GenericAdaptor<::llvm::ArrayRef<::mlir::Attribute>>;
+  static ::llvm::ArrayRef<::llvm::StringRef> getAttributeNames() {
+    return {};
+  }
+
+  static constexpr ::llvm::StringLiteral getOperationName() {
+    return ::llvm::StringLiteral("toy.functional_linear");
+  }
+
+  std::pair<unsigned, unsigned> getODSOperandIndexAndLength(unsigned index);
+  ::mlir::Operation::operand_range getODSOperands(unsigned index);
+  ::mlir::TypedValue<::mlir::TensorType> getInput();
+  ::mlir::TypedValue<::mlir::TensorType> getWeight();
+  ::mlir::TypedValue<::mlir::TensorType> getBias();
+  ::mlir::OpOperand &getInputMutable();
+  ::mlir::OpOperand &getWeightMutable();
+  ::mlir::OpOperand &getBiasMutable();
+  std::pair<unsigned, unsigned> getODSResultIndexAndLength(unsigned index);
+  ::mlir::Operation::result_range getODSResults(unsigned index);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, Value input, Value weight, Value bias);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Type resultType0, ::mlir::Value input, ::mlir::Value weight, ::mlir::Value bias);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value input, ::mlir::Value weight, ::mlir::Value bias);
+  static void build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes = {});
+  static ::mlir::ParseResult parse(::mlir::OpAsmParser &parser, ::mlir::OperationState &result);
+  void print(::mlir::OpAsmPrinter &p);
+  ::mlir::LogicalResult verifyInvariantsImpl();
+  ::mlir::LogicalResult verifyInvariants();
+public:
+};
+} // namespace toy
+} // namespace mlir
+MLIR_DECLARE_EXPLICIT_TYPE_ID(::mlir::toy::FunctionalLinearOp)
 
 namespace mlir {
 namespace toy {

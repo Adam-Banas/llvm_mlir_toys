@@ -13,6 +13,7 @@
 ::mlir::toy::AddOp,
 ::mlir::toy::ConstantOp,
 ::mlir::toy::FuncOp,
+::mlir::toy::FunctionalLinearOp,
 ::mlir::toy::GenericCallOp,
 ::mlir::toy::MulOp,
 ::mlir::toy::PrintOp,
@@ -945,6 +946,147 @@ void FuncOp::setResAttrsAttr(::mlir::ArrayAttr attr) {
 } // namespace toy
 } // namespace mlir
 MLIR_DEFINE_EXPLICIT_TYPE_ID(::mlir::toy::FuncOp)
+
+namespace mlir {
+namespace toy {
+
+//===----------------------------------------------------------------------===//
+// ::mlir::toy::FunctionalLinearOp definitions
+//===----------------------------------------------------------------------===//
+
+namespace detail {
+FunctionalLinearOpGenericAdaptorBase::FunctionalLinearOpGenericAdaptorBase(::mlir::DictionaryAttr attrs, const ::mlir::EmptyProperties &properties, ::mlir::RegionRange regions) : odsAttrs(attrs), odsRegions(regions) {  if (odsAttrs)
+    odsOpName.emplace("toy.functional_linear", odsAttrs.getContext());
+}
+
+FunctionalLinearOpGenericAdaptorBase::FunctionalLinearOpGenericAdaptorBase(FunctionalLinearOp op) : FunctionalLinearOpGenericAdaptorBase(op->getAttrDictionary(), op.getProperties(), op->getRegions()) {}
+
+std::pair<unsigned, unsigned> FunctionalLinearOpGenericAdaptorBase::getODSOperandIndexAndLength(unsigned index, unsigned odsOperandsSize) {
+  return {index, 1};
+}
+
+::mlir::DictionaryAttr FunctionalLinearOpGenericAdaptorBase::getAttributes() {
+  return odsAttrs;
+}
+
+} // namespace detail
+FunctionalLinearOpAdaptor::FunctionalLinearOpAdaptor(FunctionalLinearOp op) : FunctionalLinearOpGenericAdaptor(op->getOperands(), op) {}
+
+::mlir::LogicalResult FunctionalLinearOpAdaptor::verify(::mlir::Location loc) {
+  return ::mlir::success();
+}
+
+std::pair<unsigned, unsigned> FunctionalLinearOp::getODSOperandIndexAndLength(unsigned index) {
+  return {index, 1};
+}
+
+::mlir::Operation::operand_range FunctionalLinearOp::getODSOperands(unsigned index) {
+  auto valueRange = getODSOperandIndexAndLength(index);
+  return {std::next(getOperation()->operand_begin(), valueRange.first),
+           std::next(getOperation()->operand_begin(), valueRange.first + valueRange.second)};
+}
+
+::mlir::TypedValue<::mlir::TensorType> FunctionalLinearOp::getInput() {
+  return ::llvm::cast<::mlir::TypedValue<::mlir::TensorType>>(*getODSOperands(0).begin());
+}
+
+::mlir::TypedValue<::mlir::TensorType> FunctionalLinearOp::getWeight() {
+  return ::llvm::cast<::mlir::TypedValue<::mlir::TensorType>>(*getODSOperands(1).begin());
+}
+
+::mlir::TypedValue<::mlir::TensorType> FunctionalLinearOp::getBias() {
+  return ::llvm::cast<::mlir::TypedValue<::mlir::TensorType>>(*getODSOperands(2).begin());
+}
+
+::mlir::OpOperand &FunctionalLinearOp::getInputMutable() {
+  auto range = getODSOperandIndexAndLength(0);
+  return getOperation()->getOpOperand(range.first);
+}
+
+::mlir::OpOperand &FunctionalLinearOp::getWeightMutable() {
+  auto range = getODSOperandIndexAndLength(1);
+  return getOperation()->getOpOperand(range.first);
+}
+
+::mlir::OpOperand &FunctionalLinearOp::getBiasMutable() {
+  auto range = getODSOperandIndexAndLength(2);
+  return getOperation()->getOpOperand(range.first);
+}
+
+std::pair<unsigned, unsigned> FunctionalLinearOp::getODSResultIndexAndLength(unsigned index) {
+  return {index, 1};
+}
+
+::mlir::Operation::result_range FunctionalLinearOp::getODSResults(unsigned index) {
+  auto valueRange = getODSResultIndexAndLength(index);
+  return {std::next(getOperation()->result_begin(), valueRange.first),
+           std::next(getOperation()->result_begin(), valueRange.first + valueRange.second)};
+}
+
+void FunctionalLinearOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Type resultType0, ::mlir::Value input, ::mlir::Value weight, ::mlir::Value bias) {
+  odsState.addOperands(input);
+  odsState.addOperands(weight);
+  odsState.addOperands(bias);
+  odsState.addTypes(resultType0);
+}
+
+void FunctionalLinearOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value input, ::mlir::Value weight, ::mlir::Value bias) {
+  odsState.addOperands(input);
+  odsState.addOperands(weight);
+  odsState.addOperands(bias);
+  assert(resultTypes.size() == 1u && "mismatched number of results");
+  odsState.addTypes(resultTypes);
+}
+
+void FunctionalLinearOp::build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes) {
+  assert(operands.size() == 3u && "mismatched number of parameters");
+  odsState.addOperands(operands);
+  odsState.addAttributes(attributes);
+  assert(resultTypes.size() == 1u && "mismatched number of return types");
+  odsState.addTypes(resultTypes);
+}
+
+::mlir::LogicalResult FunctionalLinearOp::verifyInvariantsImpl() {
+  {
+    unsigned index = 0; (void)index;
+    auto valueGroup0 = getODSOperands(0);
+
+    for (auto v : valueGroup0) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_Ops0(*this, v.getType(), "operand", index++)))
+        return ::mlir::failure();
+    }
+    auto valueGroup1 = getODSOperands(1);
+
+    for (auto v : valueGroup1) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_Ops0(*this, v.getType(), "operand", index++)))
+        return ::mlir::failure();
+    }
+    auto valueGroup2 = getODSOperands(2);
+
+    for (auto v : valueGroup2) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_Ops0(*this, v.getType(), "operand", index++)))
+        return ::mlir::failure();
+    }
+  }
+  {
+    unsigned index = 0; (void)index;
+    auto valueGroup0 = getODSResults(0);
+
+    for (auto v : valueGroup0) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_Ops0(*this, v.getType(), "result", index++)))
+        return ::mlir::failure();
+    }
+  }
+  return ::mlir::success();
+}
+
+::mlir::LogicalResult FunctionalLinearOp::verifyInvariants() {
+  return verifyInvariantsImpl();
+}
+
+} // namespace toy
+} // namespace mlir
+MLIR_DEFINE_EXPLICIT_TYPE_ID(::mlir::toy::FunctionalLinearOp)
 
 namespace mlir {
 namespace toy {

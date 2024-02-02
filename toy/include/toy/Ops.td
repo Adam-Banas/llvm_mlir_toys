@@ -132,6 +132,33 @@ def SubOp : Toy_Op<"sub"> {
 }
 
 //===----------------------------------------------------------------------===//
+// FunctionalLinearOp
+//===----------------------------------------------------------------------===//
+
+def FunctionalLinearOp : Toy_Op<"functional_linear"> {
+  let summary = "linear (dense) layer in functional form";
+  let description = [{
+    The "functional_linear" applies a linear transformation to the incoming data.
+    There are three inputs (input activation, weight, bias) and one output.
+    Constraints:
+
+    The outer dimension of input and weight tensors need to match (input features).
+    The inner dimension of weight need to match bias dimension (out features).
+  }];
+
+  let arguments = (ins F64Tensor:$input, F64Tensor:$weight, F64Tensor:$bias);
+  let results = (outs F64Tensor);
+
+  // Indicate that the operation has a custom parser and printer method.
+  let hasCustomAssemblyFormat = 1;
+
+  // Allow building an FunctionalLinearOp with from the three input operands.
+  let builders = [
+    OpBuilder<(ins "Value":$input, "Value":$weight, "Value":$bias)>
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // FuncOp
 //===----------------------------------------------------------------------===//
 
