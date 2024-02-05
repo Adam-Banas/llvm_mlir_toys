@@ -204,6 +204,23 @@ mlir::ParseResult SubOp::parse(mlir::OpAsmParser &parser,
 
 void SubOp::print(mlir::OpAsmPrinter &p) { printBinaryOp(p, *this); }
 
+//===----------------------------------------------------------------------===//
+// FunctionalLinearOp
+//===----------------------------------------------------------------------===//
+
+void FunctionalLinearOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                  mlir::Value input, mlir::Value weight, mlir::Value bias) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({input, weight, bias});
+}
+
+mlir::ParseResult FunctionalLinearOp::parse(mlir::OpAsmParser &parser,
+                               mlir::OperationState &result) {
+  return failure();
+}
+
+void FunctionalLinearOp::print(mlir::OpAsmPrinter &p) { p << "Parsing FunctionalLinearOp not implemented"; }
+
 
 //===----------------------------------------------------------------------===//
 // GenericCallOp
