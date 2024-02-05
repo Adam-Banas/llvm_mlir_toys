@@ -4,7 +4,7 @@ set -e
 BUILD_DIR=build
 
 # Tests
-for file in basic subtract transpose_sequence
+for file in basic subtract transpose_sequence reshape_sequence
 do
     echo "Checking $file.toy..."
     $BUILD_DIR/bin/toyc tests/$file.toy -emit=mlir 2>&1 -opt | FileCheck tests/$file.toy

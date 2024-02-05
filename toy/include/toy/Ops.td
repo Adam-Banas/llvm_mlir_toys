@@ -296,7 +296,7 @@ def PrintOp : Toy_Op<"print"> {
 // ReshapeOp
 //===----------------------------------------------------------------------===//
 
-def ReshapeOp : Toy_Op<"reshape"> {
+def ReshapeOp : Toy_Op<"reshape", [Pure]> {
   let summary = "tensor reshape operation";
   let description = [{
     Reshape operation is transforming its input tensor into a new tensor with
@@ -315,6 +315,9 @@ def ReshapeOp : Toy_Op<"reshape"> {
   let assemblyFormat = [{
     `(` $input `:` type($input) `)` attr-dict `to` type(results)
   }];
+
+  // Enable registering canonicalization patterns with this operation.
+  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//

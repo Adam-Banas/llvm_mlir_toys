@@ -11,6 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <iostream>
+
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Value.h"
@@ -53,4 +55,40 @@ struct SimplifyRedundantTranspose : public mlir::OpRewritePattern<TransposeOp> {
 void TransposeOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
   results.add<SimplifyRedundantTranspose>(context);
+}
+
+/// This is an example of a c++ rewrite pattern for the ReshapeOp. It
+/// optimizes the following scenario: reshape(reshape(x)) -> x
+struct ReshapeReshapeOptPattern : public mlir::OpRewritePattern<ReshapeOp> {
+  /// We register this pattern to match every toy.reshape in the IR.
+  /// The "benefit" is used by the framework to order the patterns and process
+  /// them in order of profitability.
+  ReshapeReshapeOptPattern(mlir::MLIRContext *context)
+      : OpRewritePattern<ReshapeOp>(context, /*benefit=*/1) {}
+
+  /// This method attempts to match a pattern and rewrite it. The rewriter
+  /// argument is the orchestrator of the sequence of rewrites. The pattern is
+  /// expected to interact with it to perform any changes to the IR from here.
+  mlir::LogicalResult
+  matchAndRewrite(ReshapeOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    // Look through the input of the current reshape.
+    mlir::Value reshapeInput = op.getOperand();
+    ReshapeOp reshapeInputOp = reshapeInput.getDefiningOp<ReshapeOp>();
+
+    // Input defined by another reshape? If not, no match.
+    if (!reshapeInputOp) {
+      return failure();
+    }
+
+    // Otherwise, we have a redundant reshape. Use the rewriter.
+    rewriter.replaceOpWithNewOp<ReshapeOp>(op, op.getResult().getType(), reshapeInputOp.getOperand());
+    return success();
+  }
+};
+
+// Register our patterns for rewrite by the Canonicalization framework.
+void ReshapeOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.add<ReshapeReshapeOptPattern>(context);
 }
