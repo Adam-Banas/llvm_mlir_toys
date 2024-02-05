@@ -1,0 +1,29 @@
+# RUN: toyc %s -emit=mlir 2>&1 | FileCheck %s
+
+def double_transpose(x) {
+  return transpose(transpose(x));
+}
+
+def triple_transpose(x) {
+  return transpose(transpose(transpose(x)));
+}
+
+def transpose_add_transpose(x, y) {
+  return transpose(transpose(x)+y);
+}
+
+# CHECK-LABEL:   toy.func @double_transpose(
+# CHECK-SAME:    [[VAL_0:%.*]]: tensor<*xf64>) -> tensor<*xf64>
+# CHECK:         toy.return [[VAL_0]] : tensor<*xf64>
+
+# CHECK-LABEL:   toy.func @triple_transpose(
+# CHECK-SAME:    [[VAL_0:%.*]]: tensor<*xf64>) -> tensor<*xf64>
+# CHECK:         [[VAL_1:%.*]] = toy.transpose([[VAL_0]] : tensor<*xf64>) to tensor<*xf64>
+# CHECK-NEXT:    toy.return [[VAL_1]] : tensor<*xf64>
+
+# CHECK-LABEL:   toy.func @transpose_add_transpose(
+# CHECK-SAME:    [[VAL_0:%.*]]: tensor<*xf64>, [[VAL_1:%.*]]: tensor<*xf64>) -> tensor<*xf64>
+# CHECK:         [[VAL_2:%.*]] = toy.transpose([[VAL_0]] : tensor<*xf64>) to tensor<*xf64>
+# CHECK-NEXT:    [[VAL_3:%.*]] = toy.add [[VAL_2]], [[VAL_1]] :  tensor<*xf64>
+# CHECK-NEXT:    [[VAL_4:%.*]] = toy.transpose([[VAL_3]] : tensor<*xf64>) to tensor<*xf64>
+# CHECK-NEXT:    toy.return [[VAL_4]] : tensor<*xf64>

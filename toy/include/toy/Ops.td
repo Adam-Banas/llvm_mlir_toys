@@ -363,7 +363,7 @@ def ReturnOp : Toy_Op<"return", [Pure, HasParent<"FuncOp">,
 // TransposeOp
 //===----------------------------------------------------------------------===//
 
-def TransposeOp : Toy_Op<"transpose"> {
+def TransposeOp : Toy_Op<"transpose", [Pure]> {
   let summary = "transpose operation";
 
   let arguments = (ins F64Tensor:$input);
@@ -380,6 +380,9 @@ def TransposeOp : Toy_Op<"transpose"> {
 
   // Invoke a static verify method to verify this transpose operation.
   let hasVerifier = 1;
+
+  // Enable registering canonicalization patterns with this operation.
+  let hasCanonicalizer = 1;
 }
 
 #endif // TOY_OPS

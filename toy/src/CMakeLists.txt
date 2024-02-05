@@ -5,8 +5,9 @@ set(LLVM_LINK_COMPONENTS
 add_llvm_executable(toyc
   toyc.cpp
   parser/AST.cpp
-  mlir/MLIRGen.cpp
   mlir/Dialect.cpp
+  mlir/MLIRGen.cpp
+  mlir/ToyCombine.cpp
 
   DEPENDS
   ToyOpsIncGen

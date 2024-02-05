@@ -3,8 +3,8 @@
 set -e
 
 INPUT_FILE=$1
-if [ -z "$INPUT_FILE" ]; then INPUT_FILE='codegen.toy'; fi
+if [ -z "$INPUT_FILE" ]; then INPUT_FILE='tests/codegen.toy'; fi
 
-MLIR_BUILD_PATH="../../llvm-project/build"
+BUILD_DIR="build"
 
-$MLIR_BUILD_PATH/bin/toyc-ch2 -emit=mlir -mlir-print-debuginfo $INPUT_FILE
+$BUILD_DIR/bin/toyc -emit=mlir -opt -mlir-print-debuginfo $INPUT_FILE
