@@ -1,8 +1,12 @@
-# RUN: toyc-ch2 %s -emit=mlir 2>&1 | FileCheck %s
+# RUN: toyc %s -emit=mlir 2>&1 | FileCheck %s
 
 # User defined generic function that operates on unknown shaped arguments
 def multiply_transpose(a, b) {
   return transpose(a) * transpose(b);
+}
+
+def add_transpose(a, b) {
+  return transpose(a) + transpose(b);
 }
 
 def main() {
@@ -18,6 +22,13 @@ def main() {
 # CHECK:         [[VAL_2:%.*]] = toy.transpose([[VAL_0]] : tensor<*xf64>) to tensor<*xf64>
 # CHECK-NEXT:    [[VAL_3:%.*]] = toy.transpose([[VAL_1]] : tensor<*xf64>) to tensor<*xf64>
 # CHECK-NEXT:    [[VAL_4:%.*]] = toy.mul [[VAL_2]], [[VAL_3]] :  tensor<*xf64>
+# CHECK-NEXT:    toy.return [[VAL_4]] : tensor<*xf64>
+
+# CHECK-LABEL: toy.func @add_transpose(
+# CHECK-SAME:                               [[VAL_0:%.*]]: tensor<*xf64>, [[VAL_1:%.*]]: tensor<*xf64>) -> tensor<*xf64>
+# CHECK:         [[VAL_2:%.*]] = toy.transpose([[VAL_0]] : tensor<*xf64>) to tensor<*xf64>
+# CHECK-NEXT:    [[VAL_3:%.*]] = toy.transpose([[VAL_1]] : tensor<*xf64>) to tensor<*xf64>
+# CHECK-NEXT:    [[VAL_4:%.*]] = toy.add [[VAL_2]], [[VAL_3]] :  tensor<*xf64>
 # CHECK-NEXT:    toy.return [[VAL_4]] : tensor<*xf64>
 
 # CHECK-LABEL: toy.func @main()

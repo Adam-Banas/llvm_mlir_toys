@@ -200,10 +200,12 @@ private:
     auto location = loc(binop.loc());
 
     // Derive the operation name from the binary operator. At the moment we only
-    // support '+' and '*'.
+    // support '+', '-' and '*'.
     switch (binop.getOp()) {
     case '+':
       return builder.create<AddOp>(location, lhs, rhs);
+    case '-':
+      return builder.create<SubOp>(location, lhs, rhs);
     case '*':
       return builder.create<MulOp>(location, lhs, rhs);
     }
