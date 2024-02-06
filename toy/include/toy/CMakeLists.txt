@@ -1,7 +1,3 @@
-# add_mlir_dialect(StandaloneOps standalone)
-# add_mlir_doc(StandaloneDialect StandaloneDialect Standalone/ -gen-dialect-doc)
-# add_mlir_doc(StandaloneOps StandaloneOps Standalone/ -gen-op-doc)
-
 set(LLVM_TARGET_DEFINITIONS Ops.td)
 mlir_tablegen(Ops.h.inc -gen-op-decls)
 mlir_tablegen(Ops.cpp.inc -gen-op-defs)

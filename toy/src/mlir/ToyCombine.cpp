@@ -22,6 +22,11 @@
 using namespace mlir;
 using namespace toy;
 
+namespace {
+/// Include the patterns defined in the Declarative Rewrite framework.
+#include "ToyCombine.inc"
+} // namespace
+
 /// This is an example of a c++ rewrite pattern for the TransposeOp. It
 /// optimizes the following scenario: transpose(transpose(x)) -> x
 struct SimplifyRedundantTranspose : public mlir::OpRewritePattern<TransposeOp> {
@@ -54,7 +59,13 @@ struct SimplifyRedundantTranspose : public mlir::OpRewritePattern<TransposeOp> {
 // Register our patterns for rewrite by the Canonicalization framework.
 void TransposeOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
-  results.add<SimplifyRedundantTranspose>(context);
+  // NOTE: both passes (SimplifyRedundantTranspose and TransposeTransposeOptPattern) work in the same way,
+  // they are written using different methods:
+  // - SimplifyRedundantTranspose - plain C++,
+  // - TransposeTransposeOptPattern - Table-driven Declarative Rewrite Rule (DRR)
+
+  // results.add<SimplifyRedundantTranspose>(context);
+  results.add<TransposeTransposeOptPattern>(context);
 }
 
 /// This is an example of a c++ rewrite pattern for the ReshapeOp. It
@@ -90,5 +101,7 @@ struct ReshapeReshapeOptPattern : public mlir::OpRewritePattern<ReshapeOp> {
 // Register our patterns for rewrite by the Canonicalization framework.
 void ReshapeOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
-  results.add<ReshapeReshapeOptPattern>(context);
+  results.add<ReshapeReshapeOptPattern, 
+  RedundantReshapeOptPattern,
+  FoldConstantReshapeOptPattern>(context);
 }

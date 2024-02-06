@@ -3,11 +3,21 @@ set -e
 # Configuration
 BUILD_DIR=build
 
+declare -A files_and_flags
+files_and_flags=(
+    ["basic"]=""
+    ["subtract"]=""
+    ["transpose_sequence"]="-opt"
+    ["redundant_reshapes"]="-opt"
+)
+
 # Tests
-for file in basic subtract transpose_sequence reshape_sequence
+for file in "${!files_and_flags[@]}"
 do
+    flag="${files_and_flags[$file]}"
+
     echo "Checking $file.toy..."
-    $BUILD_DIR/bin/toyc tests/$file.toy -emit=mlir 2>&1 -opt | FileCheck tests/$file.toy
+    $BUILD_DIR/bin/toyc tests/$file.toy -emit=mlir $flag 2>&1 | FileCheck tests/$file.toy
 done
 
 # Success
