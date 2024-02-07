@@ -63,6 +63,7 @@ static cl::opt<enum Action> emitAction(
     cl::values(clEnumValN(DumpMLIR, "mlir", "output the MLIR dump")));
 
 static cl::opt<bool> enableOpt("opt", cl::desc("Enable optimizations"));
+static cl::opt<bool> enableInline("inline", cl::desc("Enable inline functions. Works only with optimizations turned on (-opt)"));
 
 /// Returns a Toy AST resulting from parsing the file or a nullptr on error.
 std::unique_ptr<toy::ModuleAST> parseInputFile(llvm::StringRef filename) {
@@ -124,6 +125,11 @@ int dumpMLIR() {
     // Apply any generic pass manager command line options and run the pipeline.
     if (mlir::failed(mlir::applyPassManagerCLOptions(pm)))
       return 4;
+
+    if (enableInline) {
+      // Inline all functions into main and then delete them.
+      pm.addPass(mlir::createInlinerPass());
+    }
 
     // Add a run of the canonicalizer to optimize the mlir module.
     pm.addNestedPass<mlir::toy::FuncOp>(mlir::createCanonicalizerPass());

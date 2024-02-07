@@ -9,6 +9,7 @@ files_and_flags=(
     ["subtract"]=""
     ["transpose_sequence"]="-opt"
     ["redundant_reshapes"]="-opt"
+    ["function_calls"]="-opt -inline"
 )
 
 # Tests

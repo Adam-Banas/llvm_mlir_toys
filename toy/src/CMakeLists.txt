@@ -24,9 +24,12 @@ llvm_update_compile_flags(toyc)
 target_link_libraries(toyc
   PRIVATE
   MLIRAnalysis
+  MLIRCastInterfaces
+  MLIRCallInterfaces
   MLIRFunctionInterfaces
   MLIRIR
   MLIRParser
+  MLIRPass
   MLIRSideEffectInterfaces
   MLIRTransforms
   )

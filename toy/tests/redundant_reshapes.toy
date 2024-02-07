@@ -14,12 +14,12 @@ def constant_reshape() {
 
 # TODO: Missing test for RedundantReshapeOptPattern, couldn't find a way to actually test it
 
-# CHECK-LABEL:   toy.func @double_reshape(
+# CHECK-LABEL:   toy.func private @double_reshape(
 # CHECK-SAME:    [[VAL_0:%.*]]: tensor<*xf64>) -> tensor<*xf64>
 # CHECK-NEXT:    [[VAL_1:%.*]] = toy.reshape([[VAL_0]] : tensor<*xf64>) to tensor<4x2xf64>
 # CHECK-NEXT:    toy.return [[VAL_1]] : tensor<4x2xf64>
 
-# CHECK-LABEL:   toy.func @constant_reshape(
+# CHECK-LABEL:   toy.func private @constant_reshape(
 # CHECK-NEXT:    [[VAL_0:%.*]] = toy.constant
 # CHECK-SAME:           dense<[
 # CHECK-SAME:           [1.000000e+00, 2.000000e+00], [3.000000e+00, 4.000000e+00] 
