@@ -95,8 +95,9 @@ struct ShapeInferencePass
     if (!opWorklist.empty()) {
       // NOTE: In original implementation this means pass failure (emit error + call to signalPassFailure),
       // however I want to support the case without inlining, so it is fine to have some dynamic shapes
-      f.emitWarning("Shape inference failed, ")
+      f.emitError("Shape inference failed, ")
           << opWorklist.size() << " operations couldn't be inferred\n";
+      return signalPassFailure();
     }
   }
 

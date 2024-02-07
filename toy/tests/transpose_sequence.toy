@@ -14,7 +14,7 @@ def transpose_add_transpose(x, y) {
 
 # CHECK-LABEL:   toy.func private @double_transpose(
 # CHECK-SAME:    [[VAL_0:%.*]]: tensor<*xf64>) -> tensor<*xf64>
-# CHECK:         toy.return [[VAL_0]] : tensor<*xf64>
+# CHECK-NEXT:    toy.return [[VAL_0]] : tensor<*xf64>
 
 # CHECK-LABEL:   toy.func private @triple_transpose(
 # CHECK-SAME:    [[VAL_0:%.*]]: tensor<*xf64>) -> tensor<*xf64>

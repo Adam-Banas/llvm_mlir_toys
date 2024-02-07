@@ -65,6 +65,7 @@ static cl::opt<enum Action> emitAction(
 
 static cl::opt<bool> enableOpt("opt", cl::desc("Enable optimizations"));
 static cl::opt<bool> enableInline("inline", cl::desc("Enable inline functions. Works only with optimizations turned on (-opt)"));
+static cl::opt<bool> disableShapeInference("no-shape-inference", cl::desc("Disable shape inference"));
 
 /// Returns a Toy AST resulting from parsing the file or a nullptr on error.
 std::unique_ptr<toy::ModuleAST> parseInputFile(llvm::StringRef filename) {
@@ -135,7 +136,9 @@ int dumpMLIR() {
     // Now that there is only one function, we can infer the shapes of each of
     // the operations.
     mlir::OpPassManager &optPM = pm.nest<mlir::toy::FuncOp>();
-    optPM.addPass(mlir::toy::createShapeInferencePass());
+    if (!disableShapeInference) {
+      optPM.addPass(mlir::toy::createShapeInferencePass());
+    }
     // Add a run of the canonicalizer to optimize the mlir module.
     optPM.addPass(mlir::createCanonicalizerPass());
     optPM.addPass(mlir::createCSEPass());

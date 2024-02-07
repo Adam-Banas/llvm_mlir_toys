@@ -7,8 +7,8 @@ declare -A files_and_flags
 files_and_flags=(
     ["basic"]=""
     ["subtract"]=""
-    ["transpose_sequence"]="-opt"
-    ["redundant_reshapes"]="-opt"
+    ["transpose_sequence"]="-opt -no-shape-inference"
+    ["redundant_reshapes"]="-opt -no-shape-inference"
     ["inlined_functions"]="-opt -inline"
     ["shape_inference"]="-opt -inline"
     ["functions_shapes_cse_integration"]="-opt -inline"
