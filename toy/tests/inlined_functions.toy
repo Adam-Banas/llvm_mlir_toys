@@ -1,0 +1,32 @@
+# RUN: toyc %s -emit=mlir 2>&1 | FileCheck %s
+
+# User defined generic function that operates on unknown shaped arguments
+def multiply_transpose(a, b) {
+  return transpose(a) * transpose(b);
+}
+
+def add_transpose(a, b) {
+  return transpose(a) + transpose(b);
+}
+
+def sub_transpose(a, b) {
+  return transpose(a) - transpose(b);
+}
+
+def main() {
+  var a<2, 3> = [[1, 2, 3], [4, 5, 6]];
+  var b<2, 3> = [6, 5, 4, 3, 2, 1];
+  var c = multiply_transpose(a, b);
+  print(c);
+}
+
+# CHECK-LABEL: toy.func @main()
+# CHECK-NEXT:         [[VAL_0:%.*]] = toy.constant
+# CHECK-SAME:      dense<[
+# CHECK-SAME:      [1.000000e+00, 2.000000e+00, 3.000000e+00], [4.000000e+00, 5.000000e+00, 6.000000e+00]
+# CHECK-SAME:      ]> : tensor<2x3xf64>
+# CHECK-NEXT:    [[VAL_1:%.*]] = toy.constant
+# CHECK-SAME:      dense<[
+# CHECK-SAME:      [6.000000e+00, 5.000000e+00, 4.000000e+00], [3.000000e+00, 2.000000e+00, 1.000000e+00]
+# CHECK-SAME:      ]> : tensor<2x3xf64>
+# CHECK-NEXT:    toy.transpose

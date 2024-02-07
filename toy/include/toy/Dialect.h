@@ -21,6 +21,7 @@
 #include "mlir/Interfaces/CastInterfaces.h"
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "toy/ShapeInferenceInterface.h"
 
 /// Include the auto-generated header file containing the declaration of the toy
 /// dialect.

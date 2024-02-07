@@ -17,6 +17,7 @@
 #include "toy/Lexer.h"
 #include "toy/MLIRGen.h"
 #include "toy/Parser.h"
+#include "toy/Passes.h"
 
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -131,8 +132,13 @@ int dumpMLIR() {
       pm.addPass(mlir::createInlinerPass());
     }
 
+    // Now that there is only one function, we can infer the shapes of each of
+    // the operations.
+    mlir::OpPassManager &optPM = pm.nest<mlir::toy::FuncOp>();
+    optPM.addPass(mlir::toy::createShapeInferencePass());
     // Add a run of the canonicalizer to optimize the mlir module.
-    pm.addNestedPass<mlir::toy::FuncOp>(mlir::createCanonicalizerPass());
+    optPM.addPass(mlir::createCanonicalizerPass());
+    optPM.addPass(mlir::createCSEPass());
     if (mlir::failed(pm.run(*module)))
       return 4;
   }

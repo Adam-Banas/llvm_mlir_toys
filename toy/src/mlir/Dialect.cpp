@@ -280,13 +280,19 @@ mlir::ParseResult SubOp::parse(mlir::OpAsmParser &parser,
 
 void SubOp::print(mlir::OpAsmPrinter &p) { printBinaryOp(p, *this); }
 
+/// Infer the output shape of the SubOp, this is required by the shape
+/// inference interface.
+void SubOp::inferShapes() {
+  getResult().setType(getRhs().getType());
+}
+
 //===----------------------------------------------------------------------===//
 // CastOp
 //===----------------------------------------------------------------------===//
 
-// /// Infer the output shape of the CastOp, this is required by the shape
-// /// inference interface.
-// void CastOp::inferShapes() { getResult().setType(getInput().getType()); }
+/// Infer the output shape of the CastOp, this is required by the shape
+/// inference interface.
+void CastOp::inferShapes() { getResult().setType(getInput().getType()); }
 
 /// Returns true if the given set of input and result types are compatible with
 /// this cast operation. This is required by the `CastOpInterface` to verify
@@ -411,6 +417,14 @@ mlir::ParseResult MulOp::parse(mlir::OpAsmParser &parser,
 
 void MulOp::print(mlir::OpAsmPrinter &p) { printBinaryOp(p, *this); }
 
+/// Infer the output shape of the MulOp, this is required by the shape inference
+/// interface.
+void MulOp::inferShapes() {
+  // NOTE: Both RHS and LHS should have the same types, hence it doesn't matter which type we'll get
+  assert(getRhs().getType() == getLhs().getType());
+  getResult().setType(getRhs().getType());
+}
+
 //===----------------------------------------------------------------------===//
 // ReturnOp
 //===----------------------------------------------------------------------===//
@@ -471,6 +485,17 @@ mlir::LogicalResult TransposeOp::verify() {
            << "expected result shape to be a transpose of the input";
   }
   return mlir::success();
+}
+
+/// Infer the output shape of the TransposeOp, this is required by the shape
+/// inference interface.
+void TransposeOp::inferShapes() {
+  auto arrayTy = llvm::cast<RankedTensorType>(getInp().getType());
+  if (arrayTy.getShape().size() != 2) {
+    emitError() << "Infering shapes of transpose of tensor rank " << arrayTy.getShape().size() << " not implemented!";
+  }
+  SmallVector<int64_t, 2> dims = {arrayTy.getShape()[1], arrayTy.getShape()[0]};
+  getResult().setType(RankedTensorType::get(dims, arrayTy.getElementType()));
 }
 
 //===----------------------------------------------------------------------===//

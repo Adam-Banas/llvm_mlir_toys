@@ -13,10 +13,12 @@ add_llvm_executable(toyc
   parser/AST.cpp
   mlir/Dialect.cpp
   mlir/MLIRGen.cpp
+  mlir/ShapeInferencePass.cpp
   mlir/ToyCombine.cpp
 
   DEPENDS
   ToyOpsIncGen
+  ToyShapeInferenceInterfaceIncGen
   ToyCombineIncGen
   )
 

@@ -19,6 +19,7 @@ include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/CastInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "toy/ShapeInferenceInterface.td"
 
 // Provide a definition of the 'toy' dialect in the ODS framework so that we
 // can define our operations.
@@ -114,7 +115,7 @@ def AddOp : Toy_Op<"add"> {
 // SubOp
 //===----------------------------------------------------------------------===//
 
-def SubOp : Toy_Op<"sub"> {
+def SubOp : Toy_Op<"sub", [DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "element-wise subtraction operation";
   let description = [{
     The "sub" operation performs element-wise subtraction between two tensors.
@@ -139,6 +140,7 @@ def SubOp : Toy_Op<"sub"> {
 
 def CastOp : Toy_Op<"cast", [
     DeclareOpInterfaceMethods<CastOpInterface>,
+    DeclareOpInterfaceMethods<ShapeInferenceOpInterface>,
     Pure,
     SameOperandsAndResultShape]
   > {
@@ -283,7 +285,9 @@ def GenericCallOp : Toy_Op<"generic_call",
 // MulOp
 //===----------------------------------------------------------------------===//
 
-def MulOp : Toy_Op<"mul", [Pure]> {
+def MulOp : Toy_Op<"mul",
+    [Pure,
+    DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "element-wise multiplication operation";
   let description = [{
     The "mul" operation performs element-wise multiplication between two
@@ -393,19 +397,22 @@ def ReturnOp : Toy_Op<"return", [Pure, HasParent<"FuncOp">,
 // TransposeOp
 //===----------------------------------------------------------------------===//
 
-def TransposeOp : Toy_Op<"transpose", [Pure]> {
+def TransposeOp : Toy_Op<"transpose", [
+    Pure,
+    DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]
+  > {
   let summary = "transpose operation";
 
-  let arguments = (ins F64Tensor:$input);
+  let arguments = (ins F64Tensor:$inp);
   let results = (outs F64Tensor);
 
   let assemblyFormat = [{
-    `(` $input `:` type($input) `)` attr-dict `to` type(results)
+    `(` $inp `:` type($inp) `)` attr-dict `to` type(results)
   }];
 
-  // Allow building a TransposeOp with from the input operand.
+  // Allow building a TransposeOp with from the inp operand.
   let builders = [
-    OpBuilder<(ins "Value":$input)>
+    OpBuilder<(ins "Value":$inp)>
   ];
 
   // Invoke a static verify method to verify this transpose operation.

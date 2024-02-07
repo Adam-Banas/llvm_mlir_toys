@@ -9,7 +9,9 @@ files_and_flags=(
     ["subtract"]=""
     ["transpose_sequence"]="-opt"
     ["redundant_reshapes"]="-opt"
-    ["function_calls"]="-opt -inline"
+    ["inlined_functions"]="-opt -inline"
+    ["shape_inference"]="-opt -inline"
+    ["functions_shapes_cse_integration"]="-opt -inline"
 )
 
 # Tests
