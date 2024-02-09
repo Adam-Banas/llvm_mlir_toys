@@ -171,7 +171,8 @@ struct BinaryOpLowering : public ConversionPattern {
     return success();
   }
 };
-// using AddOpLowering = BinaryOpLowering<toy::AddOp, arith::AddFOp>;
+using AddOpLowering = BinaryOpLowering<toy::AddOp, arith::AddFOp>;
+using SubOpLowering = BinaryOpLowering<toy::SubOp, arith::SubFOp>;
 using MulOpLowering = BinaryOpLowering<toy::MulOp, arith::MulFOp>;
 
 //===----------------------------------------------------------------------===//
@@ -247,32 +248,32 @@ struct ConstantOpLowering : public OpRewritePattern<toy::ConstantOp> {
 // ToyToAffine RewritePatterns: Func operations
 //===----------------------------------------------------------------------===//
 
-// struct FuncOpLowering : public OpConversionPattern<toy::FuncOp> {
-//   using OpConversionPattern<toy::FuncOp>::OpConversionPattern;
+struct FuncOpLowering : public OpConversionPattern<toy::FuncOp> {
+  using OpConversionPattern<toy::FuncOp>::OpConversionPattern;
 
-//   LogicalResult
-//   matchAndRewrite(toy::FuncOp op, OpAdaptor adaptor,
-//                   ConversionPatternRewriter &rewriter) const final {
-//     // We only lower the main function as we expect that all other functions
-//     // have been inlined.
-//     if (op.getName() != "main")
-//       return failure();
+  LogicalResult
+  matchAndRewrite(toy::FuncOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // We only lower the main function as we expect that all other functions
+    // have been inlined.
+    if (op.getName() != "main")
+      return failure();
 
-//     // Verify that the given main has no inputs and results.
-//     if (op.getNumArguments() || op.getFunctionType().getNumResults()) {
-//       return rewriter.notifyMatchFailure(op, [](Diagnostic &diag) {
-//         diag << "expected 'main' to have 0 inputs and 0 results";
-//       });
-//     }
+    // Verify that the given main has no inputs and results.
+    if (op.getNumArguments() || op.getFunctionType().getNumResults()) {
+      return rewriter.notifyMatchFailure(op, [](Diagnostic &diag) {
+        diag << "expected 'main' to have 0 inputs and 0 results";
+      });
+    }
 
-//     // Create a new non-toy function, with the same region.
-//     auto func = rewriter.create<mlir::func::FuncOp>(op.getLoc(), op.getName(),
-//                                                     op.getFunctionType());
-//     rewriter.inlineRegionBefore(op.getRegion(), func.getBody(), func.end());
-//     rewriter.eraseOp(op);
-//     return success();
-//   }
-// };
+    // Create a new non-toy function, with the same region.
+    auto func = rewriter.create<mlir::func::FuncOp>(op.getLoc(), op.getName(),
+                                                    op.getFunctionType());
+    rewriter.inlineRegionBefore(op.getRegion(), func.getBody(), func.end());
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
 
 //===----------------------------------------------------------------------===//
 // ToyToAffine RewritePatterns: Print operations
@@ -292,25 +293,25 @@ struct PrintOpLowering : public OpConversionPattern<toy::PrintOp> {
   }
 };
 
-// //===----------------------------------------------------------------------===//
-// // ToyToAffine RewritePatterns: Return operations
-// //===----------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
+// ToyToAffine RewritePatterns: Return operations
+//===----------------------------------------------------------------------===//
 
-// struct ReturnOpLowering : public OpRewritePattern<toy::ReturnOp> {
-//   using OpRewritePattern<toy::ReturnOp>::OpRewritePattern;
+struct ReturnOpLowering : public OpRewritePattern<toy::ReturnOp> {
+  using OpRewritePattern<toy::ReturnOp>::OpRewritePattern;
 
-//   LogicalResult matchAndRewrite(toy::ReturnOp op,
-//                                 PatternRewriter &rewriter) const final {
-//     // During this lowering, we expect that all function calls have been
-//     // inlined.
-//     if (op.hasOperand())
-//       return failure();
+  LogicalResult matchAndRewrite(toy::ReturnOp op,
+                                PatternRewriter &rewriter) const final {
+    // During this lowering, we expect that all function calls have been
+    // inlined.
+    if (op.hasOperand())
+      return failure();
 
-//     // We lower "toy.return" directly to "func.return".
-//     rewriter.replaceOpWithNewOp<func::ReturnOp>(op);
-//     return success();
-//   }
-// };
+    // We lower "toy.return" directly to "func.return".
+    rewriter.replaceOpWithNewOp<func::ReturnOp>(op);
+    return success();
+  }
+};
 
 //===----------------------------------------------------------------------===//
 // ToyToAffine RewritePatterns: Transpose operations
@@ -390,16 +391,12 @@ void ToyToAffineLoweringPass::runOnOperation() {
                          [](mlir::Type type) { return llvm::isa<mlir::TensorType>(type); });
   });
 
-  target.addLegalOp<toy::FuncOp, toy::ReturnOp>();
-
   // Now that the conversion target has been defined, we just need to provide
   // the set of patterns that will lower the Toy operations.
   mlir::RewritePatternSet patterns(&getContext());
-  patterns.add<ConstantOpLowering, MulOpLowering, PrintOpLowering, TransposeOpLowering>(
+  patterns.add<AddOpLowering, SubOpLowering, ConstantOpLowering, FuncOpLowering,
+               MulOpLowering, PrintOpLowering, ReturnOpLowering, TransposeOpLowering>(
       &getContext());
-//   patterns.add<AddOpLowering, ConstantOpLowering, FuncOpLowering, MulOpLowering,
-//                PrintOpLowering, ReturnOpLowering, TransposeOpLowering>(
-//       &getContext());
 
   // With the target and rewrite patterns defined, we can now attempt the
   // conversion. The conversion will signal failure if any of our `illegal`

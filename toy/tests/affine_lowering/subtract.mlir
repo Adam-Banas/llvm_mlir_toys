@@ -2,7 +2,7 @@ toy.func @main() {
   %0 = toy.constant dense<[[1.000000e+00, 2.000000e+00, 3.000000e+00], [4.000000e+00, 5.000000e+00, 6.000000e+00]]> : tensor<2x3xf64>
   %2 = toy.transpose(%0 : tensor<2x3xf64>) to tensor<3x2xf64>
   %3 = toy.mul %2, %2 : tensor<3x2xf64>
-  %4 = toy.add %3, %2 : tensor<3x2xf64>
+  %4 = toy.sub %3, %2 : tensor<3x2xf64>
   toy.print %4 : tensor<3x2xf64>
   toy.return
 }
@@ -41,7 +41,7 @@ toy.func @main() {
 // CHECK:           affine.for [[VAL_14:%.*]] = 0 to 2 {
 // CHECK:             [[VAL_15:%.*]] = affine.load [[VAL_1]]{{\[}}[[VAL_13]], [[VAL_14]]] : memref<3x2xf64>
 // CHECK:             [[VAL_16:%.*]] = affine.load [[VAL_2]]{{\[}}[[VAL_13]], [[VAL_14]]] : memref<3x2xf64>
-// CHECK:             [[VAL_17:%.*]] = arith.addf [[VAL_15]], [[VAL_16]] : f64
+// CHECK:             [[VAL_17:%.*]] = arith.subf [[VAL_15]], [[VAL_16]] : f64
 // CHECK:             affine.store [[VAL_17]], [[VAL_0]]{{\[}}[[VAL_13]], [[VAL_14]]] : memref<3x2xf64>
 // CHECK:         toy.print [[VAL_0]] : memref<3x2xf64>
 // CHECK:         memref.dealloc [[VAL_3]] : memref<2x3xf64>

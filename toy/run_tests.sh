@@ -1,4 +1,9 @@
-set -ex
+set -e
+
+# Handle args
+if [[ $1 == "-v" ]] || [[ $1 == "--verbose" ]]; then
+    set -x
+fi
 
 # Configuration
 BUILD_DIR=build
@@ -17,6 +22,7 @@ mlir_files_and_flags=(
 declare -A affine_mlir_files_and_flags
 affine_mlir_files_and_flags=(
     ["basic"]=""
+    ["subtract"]=""
 )
 
 # MLIR Tests
