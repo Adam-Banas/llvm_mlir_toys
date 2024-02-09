@@ -1,4 +1,4 @@
-set -e
+set -ex
 
 # Configuration
 BUILD_DIR=build
@@ -34,7 +34,7 @@ do
     flag="${affine_mlir_files_and_flags[$file]}"
 
     echo "Checking $file.mlir..."
-    $BUILD_DIR/bin/toyc tests/$file.mlir -emit=mlir-affine $flag 2>&1 | FileCheck tests/affine_lowering/$file.mlir
+    $BUILD_DIR/bin/toyc tests/affine_lowering/$file.mlir -emit=mlir-affine $flag 2>&1 | FileCheck tests/affine_lowering/$file.mlir
 done
 
 # Success
