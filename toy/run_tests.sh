@@ -23,6 +23,8 @@ declare -A affine_mlir_files_and_flags
 affine_mlir_files_and_flags=(
     ["basic"]=""
     ["subtract"]=""
+    ["basic-OPT"]="-opt"
+    ["subtract-OPT"]="-opt"
 )
 
 # MLIR Tests
@@ -39,8 +41,17 @@ for file in "${!affine_mlir_files_and_flags[@]}"
 do
     flag="${affine_mlir_files_and_flags[$file]}"
 
+    # This emulates C++ multimap
+    IFS="-" read -r file postfix <<< "$file"
+    
+    fc_flag=""
+    if [[ -n "${postfix}" ]]; then
+        fc_flag="--check-prefix=${postfix}"
+    fi
+
     echo "Checking $file.mlir..."
-    $BUILD_DIR/bin/toyc tests/affine_lowering/$file.mlir -emit=mlir-affine $flag 2>&1 | FileCheck tests/affine_lowering/$file.mlir
+    $BUILD_DIR/bin/toyc tests/affine_lowering/$file.mlir -emit=mlir-affine $flag 2>&1 \
+      | FileCheck tests/affine_lowering/$file.mlir $fc_flag
 done
 
 # Success
