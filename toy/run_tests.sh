@@ -29,20 +29,26 @@ affine_mlir_files_and_flags=(
 
 declare -A llvm_dialect_files_and_flags
 llvm_dialect_files_and_flags=(
-    ["basic"]="-opt"
-    ["subtract"]="-opt"
+    ["basic"]=""
+    ["subtract"]=""
+    ["basic-OPT"]="-opt"
+    ["subtract-OPT"]="-opt"
 )
 
 declare -A llvm_files_and_flags
 llvm_files_and_flags=(
-    ["basic"]="-opt"
-    ["subtract"]="-opt"
+    ["basic"]=""
+    ["subtract"]=""
+    ["basic-OPT"]="-opt"
+    ["subtract-OPT"]="-opt"
 )
 
 declare -A jit_files_and_flags
 jit_files_and_flags=(
-    ["basic"]="-opt"
-    ["subtract"]="-opt"
+    ["basic"]=""
+    ["subtract"]=""
+    ["basic-OPT"]="-opt"
+    ["subtract-OPT"]="-opt"
 )
 
 # Common function
@@ -86,7 +92,7 @@ check_mlir_files llvm_dialect_files_and_flags "tests/llvm_dialect_lowering" \
 check_mlir_files llvm_files_and_flags "tests/llvm_lowering" "mlir" "llvm"
 
 # Actual code generation using JIT
-check_mlir_files llvm_files_and_flags "tests/jit" "mlir" "jit"
+check_mlir_files jit_files_and_flags "tests/jit" "mlir" "jit"
 
 # Success
 echo -e "\e[32mAll tests passed successfully!\e[0m"

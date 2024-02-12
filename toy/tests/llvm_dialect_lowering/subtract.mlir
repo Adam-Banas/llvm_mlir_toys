@@ -15,3 +15,6 @@ toy.func @main() {
 //    conversion to core MLIR dialects) was converted to llvm call of printf
 // CHECK-LABEL: llvm.func @main()
 // CHECK:       llvm.call @printf(
+
+// OPT-LABEL: llvm.func @main()
+// OPT:       llvm.call @printf(

@@ -8,16 +8,22 @@ toy.func @main() {
 }
 
 
+// Not optimized version: Should find printf with pointer to function
 // CHECK-LABEL: define void @main()
-// CHECK: @printf
-// CHECK-SAME: 0.000000e+00
-// CHECK: @printf
-// CHECK-SAME: 1.200000e+01
-// CHECK: @printf
-// CHECK-SAME: 2.000000e+00
-// CHECK: @printf
-// CHECK-SAME: 2.000000e+01
-// CHECK: @printf
-// CHECK-SAME: 6.000000e+00
-// CHECK: @printf
-// CHECK-SAME: 3.000000e+01
+// CHECK: @printf(ptr
+
+// Optimized version: Because of constant folding, inlining and other optimizations,
+// only print statements with concrete values should be visible
+// OPT-LABEL: define void @main()
+// OPT: @printf
+// OPT-SAME: 0.000000e+00
+// OPT: @printf
+// OPT-SAME: 1.200000e+01
+// OPT: @printf
+// OPT-SAME: 2.000000e+00
+// OPT: @printf
+// OPT-SAME: 2.000000e+01
+// OPT: @printf
+// OPT-SAME: 6.000000e+00
+// OPT: @printf
+// OPT-SAME: 3.000000e+01

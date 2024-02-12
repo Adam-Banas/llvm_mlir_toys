@@ -7,9 +7,17 @@ toy.func @main() {
   toy.return
 }
 
+// Regardless of optimizations, only result values should be printed in the console
 // CHECK:      0.0
 // CHECK-SAME: 12.0
 // CHECK-NEXT: 2.0
 // CHECK-SAME: 20.0
 // CHECK-NEXT: 6.0
 // CHECK-SAME: 30.0
+
+// OPT:      0.0
+// OPT-SAME: 12.0
+// OPT-NEXT: 2.0
+// OPT-SAME: 20.0
+// OPT-NEXT: 6.0
+// OPT-SAME: 30.0
