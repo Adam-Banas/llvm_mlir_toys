@@ -13,6 +13,7 @@ add_llvm_executable(toyc
     parser/AST.cpp
     mlir/Dialect.cpp
     mlir/LowerToAffineLoops.cpp
+    mlir/LowerToLLVM.cpp
     mlir/MLIRGen.cpp
     mlir/ShapeInferencePass.cpp
     mlir/ToyCombine.cpp

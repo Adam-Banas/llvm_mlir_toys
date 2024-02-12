@@ -27,32 +27,47 @@ affine_mlir_files_and_flags=(
     ["subtract-OPT"]="-opt"
 )
 
-# MLIR Tests
-for file in "${!mlir_files_and_flags[@]}"
-do
-    flag="${mlir_files_and_flags[$file]}"
+declare -A llvm_dialect_files_and_flags
+llvm_dialect_files_and_flags=(
+    ["basic"]=""
+)
 
-    echo "Checking $file.toy..."
-    $BUILD_DIR/bin/toyc tests/$file.toy -emit=mlir $flag 2>&1 | FileCheck tests/$file.toy
-done
+# Common function
+check_mlir_files() {
+    local -n _files_and_flags=$1
+    local _file_dir=$2
+    local _file_extension=$3
+    local _emit_flag=$4
+
+    for file in "${!_files_and_flags[@]}"
+    do
+        local flag="${_files_and_flags[$file]}"
+
+        # This emulates C++ multimap
+        IFS="-" read -r file postfix <<< "$file"
+        
+        local fc_flag=""
+        if [[ -n "${postfix}" ]]; then
+            fc_flag="--check-prefix=${postfix}"
+        fi
+
+        file=$_file_dir/$file.$_file_extension
+        echo "Checking $file..."
+        ${BUILD_DIR}/bin/toyc $file -emit=$_emit_flag $flag 2>&1 \
+          | FileCheck $file $fc_flag
+    done
+}
+
+# MLIR Tests
+check_mlir_files mlir_files_and_flags "tests" "toy" "mlir" 
 
 # Lowering to affine tests
-for file in "${!affine_mlir_files_and_flags[@]}"
-do
-    flag="${affine_mlir_files_and_flags[$file]}"
+check_mlir_files affine_mlir_files_and_flags "tests/affine_lowering" \
+"mlir" "mlir-affine"
 
-    # This emulates C++ multimap
-    IFS="-" read -r file postfix <<< "$file"
-    
-    fc_flag=""
-    if [[ -n "${postfix}" ]]; then
-        fc_flag="--check-prefix=${postfix}"
-    fi
-
-    echo "Checking $file.mlir..."
-    $BUILD_DIR/bin/toyc tests/affine_lowering/$file.mlir -emit=mlir-affine $flag 2>&1 \
-      | FileCheck tests/affine_lowering/$file.mlir $fc_flag
-done
+# Lowering to 'LLVM dialect' (i.e. MLIR dialect for LLVM code)
+check_mlir_files llvm_dialect_files_and_flags "tests/llvm_dialect_lowering" \
+"mlir" "mlir-llvm"
 
 # Success
 echo -e "\e[32mAll tests passed successfully!\e[0m"
