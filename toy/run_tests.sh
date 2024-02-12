@@ -39,6 +39,12 @@ llvm_files_and_flags=(
     ["subtract"]="-opt"
 )
 
+declare -A jit_files_and_flags
+jit_files_and_flags=(
+    ["basic"]="-opt"
+    ["subtract"]="-opt"
+)
+
 # Common function
 check_mlir_files() {
     local -n _files_and_flags=$1
@@ -78,6 +84,9 @@ check_mlir_files llvm_dialect_files_and_flags "tests/llvm_dialect_lowering" \
 
 # Getting out of MLIR - lowering to actual LLVM
 check_mlir_files llvm_files_and_flags "tests/llvm_lowering" "mlir" "llvm"
+
+# Actual code generation using JIT
+check_mlir_files llvm_files_and_flags "tests/jit" "mlir" "jit"
 
 # Success
 echo -e "\e[32mAll tests passed successfully!\e[0m"
