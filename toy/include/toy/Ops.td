@@ -91,8 +91,7 @@ def ConstantOp : Toy_Op<"constant", [Pure]> {
 //===----------------------------------------------------------------------===//
 // AddOp
 //===----------------------------------------------------------------------===//
-
-def AddOp : Toy_Op<"add"> {
+def AddOp : Toy_Op<"add", [DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "element-wise addition operation";
   let description = [{
     The "add" operation performs element-wise addition between two tensors.

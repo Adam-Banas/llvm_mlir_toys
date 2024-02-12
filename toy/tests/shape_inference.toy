@@ -11,6 +11,8 @@ def main() {
   var c = multiply_transpose(a, b);
   var d = multiply_transpose(b, a);
   print(d);
+  var e = transpose(a) + d;
+  print(e);
 }
 
 # CHECK-LABEL: toy.func @main()
@@ -26,3 +28,5 @@ def main() {
 # CHECK-NEXT:    [[VAL_3:%.*]] = toy.transpose([[VAL_0]] : tensor<2x3xf64>) to tensor<3x2xf64>
 # CHECK-NEXT:    [[VAL_4:%.*]] = toy.mul [[VAL_2]], [[VAL_3]] :  tensor<3x2xf64>
 # CHECK-NEXT:    toy.print [[VAL_4]] : tensor<3x2xf64>
+# CHECK-NEXT:    [[VAL_5:%.*]] = toy.add [[VAL_3]], [[VAL_4]] : tensor<3x2xf64>
+# CHECK-NEXT:    toy.print [[VAL_5]] : tensor<3x2xf64>

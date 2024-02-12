@@ -263,6 +263,12 @@ mlir::ParseResult AddOp::parse(mlir::OpAsmParser &parser,
 
 void AddOp::print(mlir::OpAsmPrinter &p) { printBinaryOp(p, *this); }
 
+/// Infer the output shape of the SubOp, this is required by the shape
+/// inference interface.
+void AddOp::inferShapes() {
+  getResult().setType(getRhs().getType());
+}
+
 //===----------------------------------------------------------------------===//
 // SubOp
 //===----------------------------------------------------------------------===//
