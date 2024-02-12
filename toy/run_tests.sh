@@ -29,7 +29,14 @@ affine_mlir_files_and_flags=(
 
 declare -A llvm_dialect_files_and_flags
 llvm_dialect_files_and_flags=(
-    ["basic"]=""
+    ["basic"]="-opt"
+    ["subtract"]="-opt"
+)
+
+declare -A llvm_files_and_flags
+llvm_files_and_flags=(
+    ["basic"]="-opt"
+    ["subtract"]="-opt"
 )
 
 # Common function
@@ -68,6 +75,9 @@ check_mlir_files affine_mlir_files_and_flags "tests/affine_lowering" \
 # Lowering to 'LLVM dialect' (i.e. MLIR dialect for LLVM code)
 check_mlir_files llvm_dialect_files_and_flags "tests/llvm_dialect_lowering" \
 "mlir" "mlir-llvm"
+
+# Getting out of MLIR - lowering to actual LLVM
+check_mlir_files llvm_files_and_flags "tests/llvm_lowering" "mlir" "llvm"
 
 # Success
 echo -e "\e[32mAll tests passed successfully!\e[0m"
