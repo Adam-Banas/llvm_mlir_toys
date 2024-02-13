@@ -293,6 +293,74 @@ void SubOp::inferShapes() {
 }
 
 //===----------------------------------------------------------------------===//
+// MatMulOp
+//===----------------------------------------------------------------------===//
+
+void MatMulOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                     mlir::Value A, mlir::Value B) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({A, B});
+}
+
+mlir::ParseResult MatMulOp::parse(mlir::OpAsmParser &parser,
+                                  mlir::OperationState &result) {
+  return parseBinaryOp(parser, result);
+}
+
+void MatMulOp::print(mlir::OpAsmPrinter &p) { printBinaryOp(p, *this); }
+
+mlir::LogicalResult MatMulOp::verify() {
+  auto aInputType = llvm::dyn_cast<RankedTensorType>(getA().getType());
+  auto bInputType = llvm::dyn_cast<RankedTensorType>(getB().getType());
+  auto resultType = llvm::dyn_cast<RankedTensorType>(getType());
+
+  // TODO: Not sure when this scenario can happen, I took it from TransposeOp::verify
+  if (!aInputType || !bInputType || !resultType)
+    return mlir::success();
+
+  auto aInputShape = aInputType.getShape();
+  auto bInputShape = bInputType.getShape();
+  auto resultShape = resultType.getShape();
+
+  // A, B and result should be second rank tensors
+  if (aInputShape.size() != 2 || bInputShape.size() != 2 || resultShape.size() != 2) {
+    return emitError() 
+      << "Expected matmul input and output tensors to be second-rank (two-dimensional)";
+  }
+
+  // A's inner dim should match B's outer dim
+  if (aInputShape[1] != bInputShape[0]) {
+    return emitError()
+           << "Dimension mismatch for matmul";
+  }
+
+  // Verify result shape
+  if (aInputShape[0] != resultShape[0]
+      || bInputShape[1] != resultShape[1]) {
+    return emitError()
+           << "Wrong matmul result shape";
+  }
+
+  return mlir::success();
+}
+
+/// Infer the output shape of the TransposeOp, this is required by the shape
+/// inference interface.
+void MatMulOp::inferShapes() {
+  auto aArrayTy = llvm::cast<RankedTensorType>(getA().getType());
+  if (aArrayTy.getShape().size() != 2) {
+    emitError() << "Infering shapes of matmul of tensor rank " << aArrayTy.getShape().size() << " not implemented!";
+  }
+  auto bArrayTy = llvm::cast<RankedTensorType>(getB().getType());
+  if (bArrayTy.getShape().size() != 2) {
+    emitError() << "Infering shapes of matmul of tensor rank " << bArrayTy.getShape().size() << " not implemented!";
+  }
+
+  SmallVector<int64_t, 2> dims = {aArrayTy.getShape()[0], bArrayTy.getShape()[1]};
+  getResult().setType(RankedTensorType::get(dims, aArrayTy.getElementType()));
+}
+
+//===----------------------------------------------------------------------===//
 // CastOp
 //===----------------------------------------------------------------------===//
 

@@ -12,6 +12,8 @@ declare -A mlir_files_and_flags
 mlir_files_and_flags=(
     ["basic"]=""
     ["subtract"]=""
+    ["matmul"]=""
+    ["matmul-OPT"]="-opt"
     ["transpose_sequence"]="-opt -no-shape-inference"
     ["redundant_reshapes"]="-opt -no-shape-inference"
     ["inlined_functions"]="-opt -inline"
@@ -23,6 +25,7 @@ declare -A affine_mlir_files_and_flags
 affine_mlir_files_and_flags=(
     ["basic"]=""
     ["subtract"]=""
+    ["matmul"]=""
     ["basic-OPT"]="-opt"
     ["subtract-OPT"]="-opt"
 )

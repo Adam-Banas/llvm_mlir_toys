@@ -159,6 +159,41 @@ def CastOp : Toy_Op<"cast", [
 }
 
 //===----------------------------------------------------------------------===//
+// MatMulOp
+//===----------------------------------------------------------------------===//
+
+def MatMulOp : Toy_Op<"matmul", [
+    Pure,
+    DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]>
+  {
+  let summary = "Matrix product of two tensors";
+  let description = [{
+    The "matmul" applies matrix multiplication to the incoming data.
+    This operation does not apply broadcast, hence the following constaint:
+    the inner dimension of matrix A needs to match the outer dimension of matrix B.
+
+    Given that A's shape is [j, k] and B's shape is [k, l], the output shape is [j, l].
+  }];
+
+  let arguments = (ins F64Tensor:$A, F64Tensor:$B);
+  let results = (outs F64Tensor);
+
+  // Indicate that the operation has a custom parser and printer method.
+  let hasCustomAssemblyFormat = 1;
+
+  // Allow building an MatMulOp with from the two input operands.
+  let builders = [
+    OpBuilder<(ins "Value":$A, "Value":$B)>
+  ];
+
+  // Invoke a static verify method to verify this matmul operation.
+  let hasVerifier = 1;
+
+  // Enable registering canonicalization patterns with this operation.
+  // let hasCanonicalizer = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // FunctionalLinearOp
 //===----------------------------------------------------------------------===//
 
