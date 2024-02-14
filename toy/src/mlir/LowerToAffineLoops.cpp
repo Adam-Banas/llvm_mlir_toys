@@ -191,6 +191,7 @@ struct MatMulLowering : public ConversionPattern {
                   ConversionPatternRewriter &rewriter) const final {
     auto loc = op->getLoc();
     auto tensorType = llvm::cast<RankedTensorType>((*op->result_type_begin()));
+    auto matmulOp = llvm::cast<toy::MatMulOp>(op);
 
     // Insert an allocation and deallocation for the result of this operation.
     auto memRefType = convertTensorToMemRef(tensorType);
@@ -207,7 +208,9 @@ struct MatMulLowering : public ConversionPattern {
           auto zeroFloat = rewriter.create<arith::ConstantFloatOp>(loc, mlir::APFloat(0.0), rewriter.getF64Type());
           nestedBuilder.create<affine::AffineStoreOp>(loc, zeroFloat, alloc, ivs);
 
-          rewriter.create<affine::AffineForOp>(loc, 0, 3, 1, std::nullopt, [&](OpBuilder &b, Location loc, Value index, ValueRange) {
+          auto common_dim = llvm::cast<RankedTensorType>(matmulOp.getA().getType()).getShape()[1];
+
+          rewriter.create<affine::AffineForOp>(loc, 0, common_dim, 1, std::nullopt, [&](OpBuilder &b, Location loc, Value index, ValueRange) {
             std::vector<mlir::Value> loopIvsA(ivs.begin(), ivs.end());
             loopIvsA[1] = index;
             auto loadedLhs = b.create<affine::AffineLoadOp>(
