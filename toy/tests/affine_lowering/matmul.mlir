@@ -7,4 +7,9 @@ toy.func @main() {
     toy.return
 }
 
+// Just basic verifying. There are many ways to implement matmul. The actual result is verified in JIT tests.
 // CHECK-LABEL: func @main()
+// CHECK:       affine.for %arg0 = 0 to 2
+// CHECK-NEXT:  affine.for %arg1 = 0 to 4
+// CHECK-NEXT:  affine.store
+// CHECK-NEXT:  affine.for %arg2 = 0 to 3

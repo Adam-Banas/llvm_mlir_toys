@@ -50,8 +50,10 @@ declare -A jit_files_and_flags
 jit_files_and_flags=(
     ["basic"]=""
     ["subtract"]=""
+    ["matmul"]=""
     ["basic-OPT"]="-opt"
     ["subtract-OPT"]="-opt"
+    ["matmul-OPT"]="-opt"
 )
 
 # Common function
