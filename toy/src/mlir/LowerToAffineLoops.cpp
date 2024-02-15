@@ -205,12 +205,15 @@ struct MatMulLowering : public ConversionPattern {
         [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
           typename toy::MatMulOpAdaptor matmulAdaptor(operands);
 
-          auto zeroFloat = rewriter.create<arith::ConstantFloatOp>(loc, mlir::APFloat(0.0), rewriter.getF64Type());
-          nestedBuilder.create<affine::AffineStoreOp>(loc, zeroFloat, alloc, ivs);
+          auto sumInit = rewriter.create<arith::ConstantFloatOp>(loc, mlir::APFloat(0.0), rewriter.getF64Type());
+          // nestedBuilder.create<affine::AffineStoreOp>(loc, zeroFloat, alloc, ivs);
 
           auto common_dim = llvm::cast<RankedTensorType>(matmulOp.getA().getType()).getShape()[1];
 
-          rewriter.create<affine::AffineForOp>(loc, 0, common_dim, 1, std::nullopt, [&](OpBuilder &b, Location loc, Value index, ValueRange) {
+          auto loop = rewriter.create<affine::AffineForOp>(
+              loc, 0, common_dim, 1, sumInit.getResult(),
+              [&](OpBuilder &b, Location loc, Value index, ValueRange iterArgs)
+          {
             std::vector<mlir::Value> loopIvsA(ivs.begin(), ivs.end());
             loopIvsA[1] = index;
             auto loadedLhs = b.create<affine::AffineLoadOp>(
@@ -221,14 +224,12 @@ struct MatMulLowering : public ConversionPattern {
               loc, matmulAdaptor.getB(), loopIvsB);
             
             auto newProd = b.create<arith::MulFOp>(loc, loadedLhs, loadedRhs);
-            auto sumLoadOp = b.create<affine::AffineLoadOp>(loc, alloc, ivs);
-            auto addOp = b.create<arith::AddFOp>(loc, sumLoadOp.getResult(), newProd.getResult());
+            auto addOp = b.create<arith::AddFOp>(loc, iterArgs[0], newProd.getResult());
 
-            b.create<affine::AffineStoreOp>(loc, addOp.getResult(), alloc,
-                                                      ivs);
-
-            b.create<affine::AffineYieldOp>(loc);
+            b.create<affine::AffineYieldOp>(loc, addOp.getResult());
           });
+
+          rewriter.create<affine::AffineStoreOp>(loc, loop.getResult(0), alloc, ivs);
         });
 
     // Replace this operation with the generated alloc.
